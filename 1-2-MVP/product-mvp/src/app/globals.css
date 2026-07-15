@@ -1,0 +1,124 @@
+@import "tailwindcss";
+
+/*
+  Палитра унаследована от лендинга (results/landing.html): тёмный космос,
+  ледяная синева, золото. Продукт — тот же мир, но это приборная панель,
+  а не витрина: плотнее, тише, без праздничных эффектов.
+*/
+@theme {
+  --color-void: #03060f;
+  --color-void-2: #060b18;
+  --color-panel: #091324;
+  --color-panel-2: #0c1830;
+
+  --color-ink: #eaf3ff;
+  --color-muted: #8fa2c4;
+  --color-faint: #556087;
+
+  --color-ice: #8fe0ff;
+  --color-ice-strong: #4fc4f5;
+  --color-gold: #ffd98a;
+
+  --color-danger: #ff7a86;
+  --color-safe: #7ff0c8;
+
+  --color-line: rgba(150, 200, 255, 0.09);
+  --color-line-2: rgba(150, 200, 255, 0.16);
+
+  --radius-frost: 20px;
+  --font-display: var(--font-exo2), system-ui, sans-serif;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-void);
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Звёздное поле: два слоя точек, дешёвые radial-gradient вместо картинки. */
+.starfield {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1px 1px at 12% 18%, rgba(255, 255, 255, 0.5) 50%, transparent 50%),
+    radial-gradient(1px 1px at 68% 8%, rgba(255, 255, 255, 0.35) 50%, transparent 50%),
+    radial-gradient(1.4px 1.4px at 88% 42%, rgba(143, 224, 255, 0.55) 50%, transparent 50%),
+    radial-gradient(1px 1px at 32% 62%, rgba(255, 255, 255, 0.3) 50%, transparent 50%),
+    radial-gradient(1px 1px at 8% 82%, rgba(255, 255, 255, 0.28) 50%, transparent 50%),
+    radial-gradient(1.2px 1.2px at 54% 92%, rgba(143, 224, 255, 0.4) 50%, transparent 50%),
+    radial-gradient(1px 1px at 78% 72%, rgba(255, 255, 255, 0.24) 50%, transparent 50%),
+    radial-gradient(circle 620px at 78% -10%, rgba(79, 196, 245, 0.09), transparent 70%),
+    radial-gradient(circle 520px at 8% 108%, rgba(143, 224, 255, 0.05), transparent 70%);
+  background-repeat: repeat;
+  background-size: 900px 700px, 900px 700px, 900px 700px, 900px 700px, 900px 700px, 900px 700px,
+    900px 700px, 100% 100%, 100% 100%;
+}
+
+/* Ледяная панель: та же фактура, что на лендинге. */
+.frost {
+  background: linear-gradient(160deg, rgba(20, 36, 64, 0.72), rgba(8, 16, 32, 0.72));
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-frost);
+}
+
+.frost-line {
+  border-color: var(--color-line-2);
+}
+
+/* Тонкая ледяная кромка сверху — как иней на стекле. */
+.rime::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(143, 224, 255, 0.5), transparent);
+}
+
+@keyframes sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Идёт проверка: полоса света бежит по панели. */
+.scanning::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(143, 224, 255, 0.14), transparent);
+  animation: sweep 1.6s linear infinite;
+}
+
+@keyframes pulse-ice {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.pulse-ice {
+  animation: pulse-ice 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scanning::after,
+  .pulse-ice {
+    animation: none;
+  }
+}
+
+::selection {
+  background: rgba(79, 196, 245, 0.3);
+  color: #fff;
+}
+
+/* Полосы прокрутки под общий тон, чтобы не выбивались светлым. */
+* {
+  scrollbar-color: rgba(143, 224, 255, 0.25) transparent;
+  scrollbar-width: thin;
+}

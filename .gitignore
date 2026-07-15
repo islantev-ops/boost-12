@@ -1,0 +1,23 @@
+# Зависимости и сборка — ставятся командой npm install, в репозитории им делать нечего
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# Секреты. .env содержит пароль к базе и в git попасть не должен —
+# рядом лежит .env.example, по нему видно, что заполнять.
+.env
+.env.*
+!.env.example
+
+# Системный мусор
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
+
+# Служебное
+.vercel
+*.tsbuildinfo
+next-env.d.ts

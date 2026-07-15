@@ -1,7 +1,19 @@
 import type { Metadata } from 'next';
 import { Exo_2 } from 'next/font/google';
 import Link from 'next/link';
+import ThemeToggle from '@/components/ThemeToggle';
 import './globals.css';
+
+/**
+ * Тему ставим до первой отрисовки, иначе светлая тема моргает тёмным:
+ * страница успевает нарисоваться с палитрой по умолчанию, и только потом
+ * React меняет атрибут. Поэтому это синхронный скрипт в <head>, а не эффект.
+ */
+const THEME_INIT = `(function(){try{
+  var t=localStorage.getItem('theme');
+  if(!t) t=matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';
+  document.documentElement.dataset.theme=t;
+}catch(e){document.documentElement.dataset.theme='dark'}})()`;
 
 // Тот же шрифт, что на лендинге. next/font self-hostит его — внешних запросов нет.
 const exo2 = Exo_2({
@@ -21,7 +33,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ru" className={exo2.variable}>
+    <html lang="ru" className={exo2.variable} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
+      </head>
       <body className="min-h-dvh antialiased">
         <div className="starfield" aria-hidden />
         <div className="relative z-10 flex min-h-dvh flex-col">
@@ -36,7 +51,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </span>
                 <span className="text-[15px] font-bold tracking-tight">Полярная звезда</span>
               </Link>
-              <span className="text-xs text-faint">Внутренний инструмент аудита</span>
+              <div className="flex items-center gap-3">
+                <span className="hidden text-xs text-faint sm:inline">Внутренний инструмент аудита</span>
+                <ThemeToggle />
+              </div>
             </div>
           </header>
 

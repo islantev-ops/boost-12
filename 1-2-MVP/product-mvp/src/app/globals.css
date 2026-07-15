@@ -1,29 +1,95 @@
 @import "tailwindcss";
 
 /*
-  Палитра унаследована от лендинга (results/landing.html): тёмный космос,
-  ледяная синева, золото. Продукт — тот же мир, но это приборная панель,
-  а не витрина: плотнее, тише, без праздничных эффектов.
+  Две темы — только для продукта. Лендинг живёт отдельным файлом в public/
+  и остаётся тёмным всегда: он про космос и лёд, светлым ему быть незачем.
+
+  Цвета объявлены обычными переменными, а @theme inline пробрасывает их в
+  утилиты Tailwind по ссылке (var), а не по значению. Поэтому смена
+  data-theme на <html> перекрашивает всё разом, без дублирования классов.
 */
-@theme {
-  --color-void: #03060f;
-  --color-void-2: #060b18;
-  --color-panel: #091324;
-  --color-panel-2: #0c1830;
 
-  --color-ink: #eaf3ff;
-  --color-muted: #8fa2c4;
-  --color-faint: #556087;
+:root {
+  /* Тёмная — исходная палитра лендинга */
+  --void: #03060f;
+  --void-2: #060b18;
+  --panel: #091324;
+  --panel-2: #0c1830;
 
-  --color-ice: #8fe0ff;
-  --color-ice-strong: #4fc4f5;
-  --color-gold: #ffd98a;
+  --ink: #eaf3ff;
+  --muted: #8fa2c4;
+  /* Поднят с #556087: тот давал 3.3:1 к фону при норме 4.5:1 — этим цветом
+     набраны даты и подписи, читать их было тяжело. */
+  --faint: #6977a7;
 
-  --color-danger: #ff7a86;
-  --color-safe: #7ff0c8;
+  --ice: #8fe0ff;
+  --ice-strong: #4fc4f5;
+  --gold: #ffd98a;
 
-  --color-line: rgba(150, 200, 255, 0.09);
-  --color-line-2: rgba(150, 200, 255, 0.16);
+  --danger: #ff7a86;
+  --safe: #7ff0c8;
+
+  --line: rgba(150, 200, 255, 0.09);
+  --line-2: rgba(150, 200, 255, 0.16);
+
+  /* Ледяная панель и «иней» — в тёмной теме светятся */
+  --frost-bg: linear-gradient(160deg, rgba(20, 36, 64, 0.72), rgba(8, 16, 32, 0.72));
+  --rime: linear-gradient(90deg, transparent, rgba(143, 224, 255, 0.5), transparent);
+  --starfield-opacity: 1;
+  --shadow: none;
+}
+
+/*
+  Светлая — не инверсия, а другой материал: не космос, а лёд на свету.
+  Акценты пришлось затемнить: #8fe0ff на белом нечитаем — контраст около 1.4:1
+  при норме 4.5:1. Поэтому лёд здесь глубокий, а не сияющий.
+*/
+:root[data-theme="light"] {
+  --void: #eef4fb;
+  --void-2: #ffffff;
+  --panel: #ffffff;
+  --panel-2: #f5f9fe;
+
+  --ink: #0e1b2f;
+  --muted: #4a5c7d;
+  /* 4.5:1 к фону и 5:1 к белой панели — проверено расчётом, а не на глаз */
+  --faint: #637088;
+
+  --ice: #0b6f9e;
+  --ice-strong: #0a5c85;
+  --gold: #8a5a00;
+
+  --danger: #b3243a;
+  --safe: #0b6b4d;
+
+  --line: rgba(14, 27, 47, 0.1);
+  --line-2: rgba(14, 27, 47, 0.18);
+
+  --frost-bg: linear-gradient(160deg, rgba(255, 255, 255, 0.96), rgba(240, 247, 255, 0.96));
+  --rime: linear-gradient(90deg, transparent, rgba(11, 111, 158, 0.28), transparent);
+  --starfield-opacity: 0.5;
+  --shadow: 0 1px 2px rgba(14, 27, 47, 0.04), 0 8px 24px rgba(14, 27, 47, 0.05);
+}
+
+@theme inline {
+  --color-void: var(--void);
+  --color-void-2: var(--void-2);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+
+  --color-ice: var(--ice);
+  --color-ice-strong: var(--ice-strong);
+  --color-gold: var(--gold);
+
+  --color-danger: var(--danger);
+  --color-safe: var(--safe);
+
+  --color-line: var(--line);
+  --color-line-2: var(--line-2);
 
   --radius-frost: 20px;
   --font-display: var(--font-exo2), system-ui, sans-serif;
@@ -33,19 +99,28 @@ html {
   color-scheme: dark;
 }
 
-body {
-  background: var(--color-void);
-  color: var(--color-ink);
-  font-family: var(--font-display);
-  -webkit-font-smoothing: antialiased;
+html[data-theme="light"] {
+  color-scheme: light;
 }
 
-/* Звёздное поле: два слоя точек, дешёвые radial-gradient вместо картинки. */
+body {
+  background: var(--void);
+  color: var(--ink);
+  font-family: var(--font-display);
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/*
+  Звёздное поле: в светлой теме звёзды не светятся, а лежат холодной крошкой —
+  белые точки на белом не видны, поэтому они темнеют, а свечение убирается.
+*/
 .starfield {
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
+  opacity: var(--starfield-opacity);
   background-image:
     radial-gradient(1px 1px at 12% 18%, rgba(255, 255, 255, 0.5) 50%, transparent 50%),
     radial-gradient(1px 1px at 68% 8%, rgba(255, 255, 255, 0.35) 50%, transparent 50%),
@@ -61,15 +136,31 @@ body {
     900px 700px, 100% 100%, 100% 100%;
 }
 
-/* Ледяная панель: та же фактура, что на лендинге. */
+:root[data-theme="light"] .starfield {
+  background-image:
+    radial-gradient(1px 1px at 12% 18%, rgba(11, 111, 158, 0.28) 50%, transparent 50%),
+    radial-gradient(1px 1px at 68% 8%, rgba(11, 111, 158, 0.2) 50%, transparent 50%),
+    radial-gradient(1.4px 1.4px at 88% 42%, rgba(11, 111, 158, 0.24) 50%, transparent 50%),
+    radial-gradient(1px 1px at 32% 62%, rgba(11, 111, 158, 0.16) 50%, transparent 50%),
+    radial-gradient(1px 1px at 8% 82%, rgba(11, 111, 158, 0.14) 50%, transparent 50%),
+    radial-gradient(1.2px 1.2px at 54% 92%, rgba(11, 111, 158, 0.2) 50%, transparent 50%),
+    radial-gradient(1px 1px at 78% 72%, rgba(11, 111, 158, 0.12) 50%, transparent 50%),
+    radial-gradient(circle 620px at 78% -10%, rgba(79, 196, 245, 0.1), transparent 70%),
+    radial-gradient(circle 520px at 8% 108%, rgba(11, 111, 158, 0.05), transparent 70%);
+  background-size: 900px 700px, 900px 700px, 900px 700px, 900px 700px, 900px 700px, 900px 700px,
+    900px 700px, 100% 100%, 100% 100%;
+}
+
+/* Ледяная панель */
 .frost {
-  background: linear-gradient(160deg, rgba(20, 36, 64, 0.72), rgba(8, 16, 32, 0.72));
-  border: 1px solid var(--color-line);
+  background: var(--frost-bg);
+  border: 1px solid var(--line);
   border-radius: var(--radius-frost);
+  box-shadow: var(--shadow);
 }
 
 .frost-line {
-  border-color: var(--color-line-2);
+  border-color: var(--line-2);
 }
 
 /* Тонкая ледяная кромка сверху — как иней на стекле. */
@@ -79,7 +170,7 @@ body {
   inset-inline: 0;
   top: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(143, 224, 255, 0.5), transparent);
+  background: var(--rime);
 }
 
 @keyframes sweep {
@@ -94,6 +185,10 @@ body {
   inset: 0;
   background: linear-gradient(90deg, transparent, rgba(143, 224, 255, 0.14), transparent);
   animation: sweep 1.6s linear infinite;
+}
+
+:root[data-theme="light"] .scanning::after {
+  background: linear-gradient(90deg, transparent, rgba(11, 111, 158, 0.12), transparent);
 }
 
 @keyframes pulse-ice {
@@ -114,11 +209,11 @@ body {
 
 ::selection {
   background: rgba(79, 196, 245, 0.3);
-  color: #fff;
+  color: var(--ink);
 }
 
-/* Полосы прокрутки под общий тон, чтобы не выбивались светлым. */
+/* Полосы прокрутки под общий тон, чтобы не выбивались. */
 * {
-  scrollbar-color: rgba(143, 224, 255, 0.25) transparent;
+  scrollbar-color: color-mix(in srgb, var(--ice) 40%, transparent) transparent;
   scrollbar-width: thin;
 }

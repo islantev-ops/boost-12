@@ -177,16 +177,34 @@ export async function resolveHosting(url: string, deps: GeoDeps = defaultDeps): 
   const confirmedBy: string[] = [];
   if (flagged.responded) confirmedBy.push('rdap');
 
-  const geo = (await deps.fetchJson(`https://ipwho.is/${flaggedIp}`, JSON_ACCEPT)) as
-    | { success?: unknown; country_code?: unknown; connection?: { org?: unknown } }
-    | null;
-  const geoOk = Boolean(geo && geo.success === true);
-  const geoCountry = geoOk ? str(geo!.country_code)?.toUpperCase() ?? null : null;
-  if (geoCountry) confirmedBy.push('ipwho.is');
+  // Правка от 2026-07-16 (спека §4.2, упрощённое правило): если RDAP ответил,
+  // но страну не назвал, hostingFactor теперь ВСЕГДА отдаёт unknown — второй
+  // источник обвинять в одиночку не вправе (ARIN-случай практически не
+  // встречается в целевом сегменте, см. дизайн-документ). Поэтому спрашивать
+  // ipwho.is ради страны в этом случае бессмысленно.
+  //
+  // Исключение — диапазон вовсе БЕЗ имени сети: netname-проверка CDN выше его
+  // не увидела, и единственный способ распознать CDN на таком адресе —
+  // сигнал connection.org из ЭТОГО ЖЕ ответа ipwho.is (спека §4.2, п.2, живой
+  // пример 197.234.240.0/22). Если имя сети есть — CDN по нему уже проверили
+  // выше (cdnHit) и не признали, а больше сигналу connection.org взяться
+  // неоткуда: сеть с точным именем в RDAP лишним запросом не проверяем.
+  const geoUseless = flagged.responded && !flagged.country && Boolean(flagged.netname);
 
-  // Диапазон без имени сети в RDAP выдаёт себя через connection.org в ipwho.is.
-  const org = geoOk ? str((geo as { connection?: { org?: unknown } }).connection?.org) : null;
-  const isCdn = matchesCdn(org);
+  let geoCountry: string | null = null;
+  let isCdn = false;
+  if (!geoUseless) {
+    const geo = (await deps.fetchJson(`https://ipwho.is/${flaggedIp}`, JSON_ACCEPT)) as
+      | { success?: unknown; country_code?: unknown; connection?: { org?: unknown } }
+      | null;
+    const geoOk = Boolean(geo && geo.success === true);
+    geoCountry = geoOk ? str(geo!.country_code)?.toUpperCase() ?? null : null;
+    if (geoCountry) confirmedBy.push('ipwho.is');
+
+    // Диапазон без имени сети в RDAP выдаёт себя через connection.org в ipwho.is.
+    const org = geoOk ? str((geo as { connection?: { org?: unknown } }).connection?.org) : null;
+    isCdn = matchesCdn(org);
+  }
 
   return { ips: checked, country: flagged.country, netname: flagged.netname, geoCountry, isCdn, confirmedBy };
 }

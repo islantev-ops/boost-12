@@ -43,14 +43,25 @@ test('заграница: RDAP дал не-RU, ipwho.is подтвердил', a
   assert.deepEqual(fact.confirmedBy, ['rdap', 'ipwho.is']);
 });
 
-test('ARIN не отдаёт country — страну берём у ipwho.is', async () => {
+test('ARIN не отдаёт country — hostingFactor всё равно даст unknown, ipwho.is не спрашиваем (правка 2026-07-16)', async () => {
+  // Раньше здесь код шёл к ipwho.is и подтверждал US — и это могло превратить
+  // "RDAP страну не назвал" в обвинение по одному источнику. По новому
+  // упрощённому правилу (спека §4.2) checks.ts в этом случае всегда отдаёт
+  // unknown независимо от geoCountry, а имя сети (GOGL) у этого адреса уже
+  // прошло проверку на CDN по netname выше — сигналу connection.org взяться
+  // неоткуда. Поэтому сетевой запрос теперь лишний, и мы его не делаем.
+  let ipwhoCalls = 0;
   const fact = await resolveHosting('https://example.com/', deps({
-    fetchJson: async (url) =>
-      url.includes('rdap.org') ? RDAP_ARIN : { success: true, country_code: 'US' },
+    fetchJson: async (url) => {
+      if (url.includes('rdap.org')) return RDAP_ARIN;
+      ipwhoCalls += 1;
+      return { success: true, country_code: 'US' };
+    },
   }));
   assert.equal(fact.country, null, 'у ARIN поля country нет');
-  assert.equal(fact.geoCountry, 'US');
-  assert.deepEqual(fact.confirmedBy, ['rdap', 'ipwho.is']);
+  assert.equal(fact.geoCountry, null, 'запрос к ipwho.is не делаем — страну не подтверждаем и не опровергаем');
+  assert.deepEqual(fact.confirmedBy, ['rdap']);
+  assert.equal(ipwhoCalls, 0, 'RDAP ответил и назвал сеть — второй источник в этом случае ничего не решает');
 });
 
 /* ─────────────────── C1: CDN опознаётся не только по точному имени ─────────────────── */
@@ -117,9 +128,11 @@ test('RDAP молчит — страны нет, ipwho.is всё равно сп
 });
 
 test('ipwho.is вернул success:false — страну не берём', async () => {
+  // RDAP назвал не-RU страну (DE) — только в этом случае запрос к ipwho.is
+  // вообще происходит (см. тест выше про ARIN, где он теперь пропускается).
   const fact = await resolveHosting('https://example.com/', deps({
     fetchJson: async (url) =>
-      url.includes('rdap.org') ? RDAP_ARIN : { success: false, message: 'reserved range' },
+      url.includes('rdap.org') ? { country: 'DE', name: 'HETZNER-NET' } : { success: false, message: 'reserved range' },
   }));
   assert.equal(fact.geoCountry, null);
   assert.deepEqual(fact.confirmedBy, ['rdap']);

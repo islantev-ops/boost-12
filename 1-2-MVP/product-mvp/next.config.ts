@@ -16,12 +16,23 @@ const nextConfig: NextConfig = {
       beforeFiles: [{ source: '/', destination: '/landing.html' }],
       afterFiles: [],
       fallback: [],
-      output: 'export',
-      basePath: '/boost-12',
-      assetPrefix: '/boost-12',
-      images: { unoptimized: true },
     };
   },
 };
+
+/**
+ * Здесь нет настроек под GitHub Pages — и не должно быть.
+ *
+ * `output: 'export'`, `basePath`, `assetPrefix` и `images` какое-то время лежали
+ * внутри возврата `rewrites()`. Там они не значили ничего: эта функция принимает
+ * только `beforeFiles`, `afterFiles` и `fallback`. Хуже того, посторонние ключи
+ * ломали сборку целиком — «rewrites must return an array, received object».
+ *
+ * Переносить их на верхний уровень тоже нельзя. Pages отдаёт статику, а у аудита
+ * есть API-роуты, PostgreSQL и запросы к RDAP — всё серверное. При `output: 'export'`
+ * Next откажется собирать API-роуты, а `rewrites()` в статическом экспорте не
+ * поддерживается вовсе. Инструмент живёт на VPS; на Pages можно опубликовать
+ * разве что сам лендинг, и делать это надо отдельно, а не сборкой Next.
+ */
 
 export default nextConfig;

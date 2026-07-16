@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "check-site": "tsx check-site.mts",
+    "test": "node --import tsx --test src/lib/*.test.ts",
     "sync-landing": "node sync-landing.mjs",
     "prebuild": "node sync-landing.mjs",
     "predev": "node sync-landing.mjs"
@@ -29,6 +30,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
     "tailwindcss": "^4",
+    "tsx": "^4.23.1",
     "typescript": "^5"
   }
 }

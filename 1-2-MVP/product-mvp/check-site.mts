@@ -15,8 +15,10 @@ console.log(`время: ${((Date.now() - t0) / 1000).toFixed(1)}с\n`);
 for (const f of findings) {
   const mark = { violation: 'НАРУШЕНИЕ', ok: 'ок       ', manual: 'вручную  ' }[f.verdict];
   console.log(`${String(f.checkId).padStart(2)}. [${mark}] ${f.title}`);
+  // Вывод печатаем по любому вердикту, а не только по нарушению: «ок» и «вручную»
+  // тоже нужно уметь перепроверить — иначе не видно, на чём они основаны.
+  console.log(`     ${f.summary}`);
   if (f.verdict === 'violation') {
-    console.log(`     ${f.summary}`);
     for (const e of f.evidence.slice(0, 1)) {
       console.log(`     ПРУФ ${e.url}${e.line ? `:${e.line}` : ''}`);
       console.log(`     ${e.snippet.slice(0, 150)}`);

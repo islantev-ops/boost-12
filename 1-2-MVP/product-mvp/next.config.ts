@@ -16,6 +16,10 @@ const nextConfig: NextConfig = {
       beforeFiles: [{ source: '/', destination: '/landing.html' }],
       afterFiles: [],
       fallback: [],
+      output: 'export',
+      basePath: '/boost-12',
+      assetPrefix: '/boost-12',
+      images: { unoptimized: true },
     };
   },
 };

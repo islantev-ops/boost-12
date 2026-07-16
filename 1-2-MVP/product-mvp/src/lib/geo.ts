@@ -94,10 +94,19 @@ async function lookupRdap(deps: GeoDeps, ip: string) {
  * Где стоит сайт.
  *
  * Несколько A-записей (гео-балансировка, резерв) — проверяем первые
- * MAX_IPS_CHECKED (§6): все в РФ — заключение «RU» без второго источника,
- * хоть один адрес не подтверждён как RU — дальше идём тем же путём, что и с
- * одиночным нероссийским адресом. Так DNS-ротация не меняет вердикт сайта
- * между прогонами.
+ * MAX_IPS_CHECKED (§6). Три исхода:
+ *  1. Все проверенные адреса RDAP подтвердил как RU — «RU» без второго
+ *     источника, RDAP тут и есть первоисточник.
+ *  2. Хотя бы один (но не все) проверенный адрес RDAP подтвердил как RU —
+ *     это намёк на Россию, и по спеке §4.2 «любой намёк на Россию снимает
+ *     обвинение». Дальше не идём и второй источник не спрашиваем: раньше
+ *     код либо игнорировал такой намёк, либо (при отсутствии явно
+ *     нероссийского адреса) по умолчанию выбирал представителем именно этот
+ *     RU-адрес и выносил «ok» — то есть обвинение снималось, но на его место
+ *     вставало непроверенное оправдание. Правильный итог — «не знаем», а не
+ *     «RU» и не «не RU» (регресс из финального ревью, CRITICAL и IMPORTANT 2).
+ *  3. Ни одного намёка на RU — ищем представителя (явно нероссийская страна,
+ *     иначе первый проверенный адрес) и подтверждаем вторым источником.
  *
  * Асимметрия по спеке §4.2: RDAP сказал RU — верим и на этом останавливаемся
  * (ошибка тут даёт пропуск, а не ложное обвинение). Всё остальное — заявка на
@@ -124,33 +133,49 @@ export async function resolveHosting(url: string, deps: GeoDeps = defaultDeps): 
   }
   if (!ips.length) return { ...empty, error: `DNS не отдал адрес для ${host}.` };
 
+  // Дальше и в отчёте, и в решении используются ТОЛЬКО реально проверенные
+  // адреса (checked), а не полный список DNS — иначе в отчёт попадают
+  // адреса, про которые RDAP вообще не спрашивали (регресс, IMPORTANT 1).
   const checked = ips.slice(0, MAX_IPS_CHECKED);
   const perIp = await Promise.all(checked.map((ip) => lookupRdap(deps, ip)));
 
-  const confirmedBy: string[] = [];
-  if (perIp.some((r) => r.responded)) confirmedBy.push('rdap');
-
   const cdnHit = perIp.find((r) => matchesCdn(r.netname));
   if (cdnHit) {
+    // netname взялся из ответа RDAP — значит, RDAP по этому адресу ответил.
     // За CDN спрашивать гео бессмысленно: ответят про узел CDN, а не про сайт.
-    return { ips, country: null, netname: cdnHit.netname, geoCountry: null, isCdn: true, confirmedBy };
+    return { ips: checked, country: null, netname: cdnHit.netname, geoCountry: null, isCdn: true, confirmedBy: ['rdap'] };
   }
 
-  // Все проверенные адреса подтверждены реестром как RU — второй источник не
-  // нужен, RDAP тут и есть первоисточник.
   const allRu = perIp.length > 0 && perIp.every((r) => r.country === 'RU');
   if (allRu) {
-    return { ips, country: 'RU', netname: perIp[0].netname, geoCountry: null, isCdn: false, confirmedBy };
+    // Имя сети берём у первого адреса, у которого оно вообще есть, а не
+    // жёстко у perIp[0] — иначе при пустом name у первого DNS-адреса в отчёт
+    // уходит netname: null, хотя сосед по тому же вердикту его назвал.
+    const netname = perIp.find((r) => r.netname)?.netname ?? null;
+    return { ips: checked, country: 'RU', netname, geoCountry: null, isCdn: false, confirmedBy: ['rdap'] };
   }
 
-  // Хотя бы один адрес не подтверждён как RU. Берём его представителем для
-  // проверки вторым источником: приоритет — явно нероссийской стране (её и
-  // нужно подтвердить), иначе первому проверенному адресу (RDAP промолчал
-  // или не назвал страну, как у ARIN).
+  const ruHint = perIp.some((r) => r.country === 'RU');
+  if (ruHint) {
+    return { ips: checked, country: null, netname: null, geoCountry: null, isCdn: false, confirmedBy: ['rdap'] };
+  }
+
+  // Ни одного намёка на RU. Берём представителем для проверки вторым
+  // источником: приоритет — явно нероссийской стране (её и нужно подтвердить),
+  // иначе первому проверенному адресу (RDAP промолчал или не назвал страну,
+  // как у ARIN).
   const flaggedIdx = perIp.findIndex((r) => r.country && r.country !== 'RU');
   const idx = flaggedIdx >= 0 ? flaggedIdx : 0;
   const flagged = perIp[idx];
   const flaggedIp = checked[idx];
+
+  // confirmedBy обязан отражать, ответил ли RDAP именно про ЭТОТ (флагованный,
+  // обвиняемый) адрес, а не про любой из проверенных — иначе защита в
+  // checks.ts (confirmedBy.includes('rdap')) пропускает вердикт по адресу,
+  // о котором RDAP ничего не сказал, лишь потому что RDAP ответил про
+  // соседний IP (регресс, CRITICAL).
+  const confirmedBy: string[] = [];
+  if (flagged.responded) confirmedBy.push('rdap');
 
   const geo = (await deps.fetchJson(`https://ipwho.is/${flaggedIp}`, JSON_ACCEPT)) as
     | { success?: unknown; country_code?: unknown; connection?: { org?: unknown } }
@@ -163,5 +188,5 @@ export async function resolveHosting(url: string, deps: GeoDeps = defaultDeps): 
   const org = geoOk ? str((geo as { connection?: { org?: unknown } }).connection?.org) : null;
   const isCdn = matchesCdn(org);
 
-  return { ips, country: flagged.country, netname: flagged.netname, geoCountry, isCdn, confirmedBy };
+  return { ips: checked, country: flagged.country, netname: flagged.netname, geoCountry, isCdn, confirmedBy };
 }

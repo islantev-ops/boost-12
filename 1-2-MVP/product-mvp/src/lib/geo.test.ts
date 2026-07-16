@@ -142,20 +142,80 @@ test('несколько A-записей, все в РФ — ok без втор
   assert.equal(ipwhoCalls, 0, 'все адреса подтверждены RDAP как RU — второй источник не нужен');
 });
 
-test('несколько A-записей, один за границей — НЕ ok (I1, регресс: раньше проверялась только первая)', async () => {
+test('несколько A-записей, один в РФ по RDAP, другой за границей — намёк на RU останавливает и обвинение, и оправдание (I1 + CRITICAL, регресс)', async () => {
+  // Первый адрес RDAP подтвердил как RU, второй — как DE. Раньше (I1) код
+  // смотрел только на ips[0] и в понедельник давал «ok», а во вторник —
+  // обвинение, в зависимости от порядка DNS-ротации. I1 это починил, но
+  // финальное ревью (CRITICAL) нашло следующий слой бага: даже проверив ВСЕ
+  // адреса, старый код игнорировал явный RU от RDAP по соседнему адресу и
+  // всё равно обвинял по DE. По спеке §4.2 «любой намёк на Россию снимает
+  // обвинение» — правильный итог здесь «не знаем», а не «за границей».
+  let ipwhoCalls = 0;
   const fact = await resolveHosting('https://example.ru/', deps({
-    // Первый адрес в РФ, второй — в Германии. Старый код смотрел только на
-    // ips[0] и в понедельник давал «ok», а во вторник — обвинение, в
-    // зависимости от того, в каком порядке DNS-ротация отдала записи.
     resolve4: async () => ['31.31.198.246', '5.9.1.1'],
     fetchJson: async (url) => {
       if (url.includes('rdap.org')) {
         return url.includes('31.31.198.246') ? RDAP_RU : { country: 'DE', name: 'HETZNER-NET' };
       }
+      ipwhoCalls += 1;
       return { success: true, country_code: 'DE' };
     },
   }));
-  assert.deepEqual(fact.ips, ['31.31.198.246', '5.9.1.1'], 'все A-записи сохраняются');
-  assert.notEqual(fact.country, 'RU', 'хотя бы один адрес за границей — весь сайт не проходит как RU');
-  assert.equal(fact.geoCountry, 'DE');
+  assert.deepEqual(fact.ips, ['31.31.198.246', '5.9.1.1'], 'все проверенные A-записи сохраняются');
+  assert.notEqual(fact.country, 'RU', 'полностью подтвердить RU нельзя — второй адрес реестр назвал DE');
+  assert.equal(fact.country, null, 'намёк на RU не даёт и обвинить по DE — country тоже null');
+  assert.equal(fact.geoCountry, null, 'второй источник не спрашиваем: намёка на RU уже достаточно, чтобы не обвинять');
+  assert.equal(ipwhoCalls, 0, 'RU-намёк останавливает проверку раньше, чем доходит до ipwho.is');
+  assert.deepEqual(fact.confirmedBy, ['rdap']);
+});
+
+/* ─────────────────── CRITICAL: RDAP молчит именно про обвиняемый адрес ─────────────────── */
+
+test('RDAP молчит про адрес, по которому мог бы выноситься вердикт, но отвечает RU про соседний — обвинения нет (CRITICAL, регресс)', async () => {
+  // Точное воспроизведение из отчёта о финальном ревью: два адреса одного
+  // российского хостера. RDAP молчит про 31.31.198.246 (в старом коде именно
+  // он становился «представителем» по умолчанию, раз явно нероссийского
+  // адреса не нашлось) и отвечает RU/REGRU-NETWORK про 31.31.198.247.
+  // ipwho.is при этом ошибается и называет DE.
+  //
+  // Старый баг был двойным: (1) confirmedBy для проверки «RDAP ответил?»
+  // считался глобально — «ответил хоть про какой-то адрес» — хотя RDAP не
+  // сказал НИЧЕГО про адрес, по которому в итоге выносился вердикт; (2) сам
+  // явный RU от соседнего адреса игнорировался вместо того, чтобы остановить
+  // обвинение. Результат был: {country: null, geoCountry: 'DE',
+  // confirmedBy: ['rdap','ipwho.is']} → verdict: violation.
+  let ipwhoCalls = 0;
+  const fact = await resolveHosting('https://example.ru/', deps({
+    resolve4: async () => ['31.31.198.246', '31.31.198.247'],
+    fetchJson: async (url) => {
+      if (url.includes('rdap.org')) {
+        return url.includes('31.31.198.246') ? null : RDAP_RU;
+      }
+      ipwhoCalls += 1;
+      return { success: true, country_code: 'DE' }; // ipwho.is ошибается
+    },
+  }));
+  assert.equal(fact.country, null, 'полного подтверждения RU нет — один адрес RDAP не проверил');
+  assert.equal(fact.geoCountry, null, 'ошибке ipwho.is (DE) даже не дали случиться — до неё не дошли');
+  assert.deepEqual(fact.confirmedBy, ['rdap'], 'RDAP реально ответил (про соседний адрес) — это не молчание реестра');
+  assert.equal(ipwhoCalls, 0, 'намёк на RU снимает обвинение раньше похода ко второму источнику');
+});
+
+/* ─────────────────── IMPORTANT 2: неподтверждённый адрес не даёт "ok" по умолчанию ─────────────────── */
+
+test('RDAP ответил RU по первому адресу и промолчал про второй — НЕ ok (IMPORTANT 2, регресс)', async () => {
+  // Старый код: allRu требовал ВСЕ адреса RU, это условие не выполнялось —
+  // но дальше flaggedIdx = perIp.findIndex(явно не-RU) не находил ничего
+  // (второй адрес просто null, а не явно иностранный), падал на idx = 0,
+  // и раз perIp[0].country === 'RU', возвращал country: 'RU' → hostingFactor
+  // выдавал «ok», хотя второй адрес реестр не подтвердил вовсе. Комментарий
+  // в geo.ts к тому моменту уже утверждал обратное — сам код это не делал.
+  const fact = await resolveHosting('https://example.ru/', deps({
+    resolve4: async () => ['31.31.198.246', '5.9.1.1'],
+    fetchJson: async (url) =>
+      url.includes('rdap.org') ? (url.includes('31.31.198.246') ? RDAP_RU : null) : null,
+  }));
+  assert.notEqual(fact.country, 'RU', 'RU подтверждён не для всех проверенных адресов — не "ok" по умолчанию');
+  assert.equal(fact.country, null);
+  assert.deepEqual(fact.confirmedBy, ['rdap'], 'RDAP ответил (про первый адрес) — это отражено честно');
 });

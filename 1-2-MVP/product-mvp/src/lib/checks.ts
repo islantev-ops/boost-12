@@ -197,6 +197,19 @@ function isConsentGated(rawTag: string): boolean {
   return /data-bx-gdpr|gdpr-counter|consent-loader|data-cookie-consent|data-cookieconsent/i.test(rawTag);
 }
 
+/** Добавляет точку в конце фразы, если её там нет — иначе она сливается со следующим предложением. */
+function withPeriod(s: string): string {
+  const t = s.trim();
+  return t && !/[.!?…]$/.test(t) ? `${t}.` : t;
+}
+
+/** Канонизирует код страны: обрезает пробелы, поднимает регистр, пустую строку сводит к null. */
+function normCountry(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const t = raw.trim().toUpperCase();
+  return t || null;
+}
+
 /**
  * Голос за размещение сайта. Спека §4.2.
  *
@@ -205,12 +218,25 @@ function isConsentGated(rawTag: string): boolean {
  * источника, любой CDN — `unknown`. Ошибка в сторону «не знаем» стоит одного
  * пункта в отчёте, ошибка в сторону обвинения — всего доверия.
  */
-function hostingFactor(h: SiteSnapshot['hosting']): Factor {
+function hostingFactor(raw: SiteSnapshot['hosting']): Factor {
   const name = 'Размещение сайта';
 
-  if (!h || !h.ips.length) {
-    return { name, vote: 'unknown', detail: h?.error ?? 'Где стоит сайт, выяснить не удалось.' };
+  if (!raw || !raw.ips.length) {
+    return {
+      name,
+      vote: 'unknown',
+      detail: raw?.error ? withPeriod(raw.error) : 'Где стоит сайт, выяснить не удалось.',
+    };
   }
+
+  // Функция обязана быть корректной сама по себе, а не полагаться на то, что
+  // geo.ts всегда отдаёт чистые данные: регистр страны, пустые строки вместо null.
+  const h = {
+    ...raw,
+    country: normCountry(raw.country),
+    geoCountry: normCountry(raw.geoCountry),
+    netname: raw.netname && raw.netname.trim() ? raw.netname.trim() : null,
+  };
 
   const where = `IP ${h.ips[0]}${h.netname ? `, сеть ${h.netname}` : ''}`;
 
@@ -218,7 +244,7 @@ function hostingFactor(h: SiteSnapshot['hosting']): Factor {
     return {
       name,
       vote: 'unknown',
-      detail: `Сайт отдаётся через CDN (${h.netname}). За CDN физическое размещение снаружи не определяется: адрес принадлежит посреднику. ${where}.`,
+      detail: `Сайт отдаётся через CDN${h.netname ? ` (${h.netname})` : ''}. За CDN физическое размещение снаружи не определяется: адрес принадлежит посреднику. ${where}.`,
     };
   }
 
@@ -242,10 +268,27 @@ function hostingFactor(h: SiteSnapshot['hosting']): Factor {
     };
   }
 
+  // Дошли сюда — оба источника согласны, что страна не RU. Но «страна» у них
+  // может быть разной: country у RIPE — это страна регистранта адресного блока,
+  // а не обязательно страна машины. Печатаем ровно то, что сказал каждый
+  // источник, а не выдаём одну страну за согласованную обеими.
+  //
+  // «Подтверждено источниками» — список тех, кто РЕАЛЬНО назвал страну, а не
+  // тех, кто просто ответил (confirmedBy). У ARIN, например, RDAP отвечает, но
+  // поля страны не возвращает: включать его в подтверждение — ложная ссылка.
+  const namedCountry: string[] = [];
+  if (h.country) namedCountry.push('rdap');
+  if (h.geoCountry) namedCountry.push('ipwho.is');
+
+  const countryText =
+    h.country && h.country !== h.geoCountry
+      ? `реестр называет страну ${h.country}, геобаза — ${h.geoCountry}`
+      : `страна ${h.geoCountry}`;
+
   return {
     name,
     vote: 'violation',
-    detail: `Сайт размещён за пределами РФ: ${where}, страна ${h.country ?? h.geoCountry} — подтверждено источниками: ${h.confirmedBy.join(', ')}.`,
+    detail: `Сайт размещён за пределами РФ: ${where}, ${countryText} — подтверждено источниками: ${namedCountry.join(', ')}.`,
   };
 }
 
@@ -317,7 +360,8 @@ function check1(s: SiteSnapshot): CheckResult {
     });
   }
 
-  factors.push(hostingFactor(s.hosting));
+  const hf = hostingFactor(s.hosting);
+  factors.push(hf);
 
   const verdict = byPresence(factors);
   const found = [gaEv.length && 'Google Analytics', gtmEv.length && 'Google Tag Manager']
@@ -328,7 +372,6 @@ function check1(s: SiteSnapshot): CheckResult {
     factors,
     verdict,
     summary: (() => {
-      const hf = factors.find((f) => f.name === 'Размещение сайта')!;
       if (verdict === 'violation') {
         // Печатаем только измеренное. Про базу данных клиента — ни слова:
         // мы её не видели, а заграница и без того красный флаг.

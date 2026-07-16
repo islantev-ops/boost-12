@@ -249,6 +249,85 @@ test('Google Analytics перебивает даже российский хос
   assertNoDbClaim(f.summary);
 });
 
+/* ─────────────────── IMPORTANT 1: непроверенный адрес не звучит в тексте как измеренный ─────────────────── */
+
+test('IMPORTANT 1 (регресс): непроверенный адрес не попадает в текст обвинения как измеренный', () => {
+  // Два адреса в ips: RDAP молчал про первый (его страну никто не узнавал),
+  // страна и сеть получены только по второму — это отражено полем ip. Текст
+  // обвинения обязан называть только его, а не оба адреса.
+  const f = check1of(snapshot({
+    ips: ['1.1.1.1', '2.2.2.2'], ip: '2.2.2.2', country: 'DE', netname: 'HETZNER-NET',
+    geoCountry: 'DE', isCdn: false, confirmedBy: ['rdap', 'ipwho.is'],
+  }));
+  assert.equal(f.verdict, 'violation');
+  assert.match(f.summary, /2\.2\.2\.2/, 'реально проверенный адрес обязан быть в тексте');
+  assert.doesNotMatch(f.summary, /1\.1\.1\.1/, 'непроверенный адрес не должен звучать как измеренный');
+  assertNoDbClaim(f.summary);
+});
+
+test('IMPORTANT 1 (регресс): в ветке «все адреса RU» по-прежнему печатаются все ips — эту ветку не меняли', () => {
+  // Явный контроль на «ok»-ветку: там allRu требует подтверждения ВСЕХ
+  // адресов, поэтому печатать их все — корректно и осталось как было.
+  const f = check1of(snapshot({
+    ips: ['31.31.198.246', '31.31.198.247'], country: 'RU', netname: 'REGRU-NETWORK',
+    geoCountry: null, isCdn: false, confirmedBy: ['rdap'],
+  }));
+  assert.equal(f.verdict, 'ok');
+  assert.match(f.summary, /31\.31\.198\.246/);
+  assert.match(f.summary, /31\.31\.198\.247/);
+});
+
+/* ─────────────────── IMPORTANT 2: счётчик Google не должен вытеснять IP/сеть/страну ─────────────────── */
+
+test('IMPORTANT 2 (регресс): при найденном Google Analytics в summary остаются и счётчик, и IP/сеть/страна', () => {
+  // Раньше при найденном счётчике summary состоял ТОЛЬКО из фразы про
+  // счётчик — hf.detail (IP, сеть, страна размещения) терялся. docx.ts
+  // печатает в отчёт только summary (не factors), поэтому у сайта с Google
+  // Analytics и заграничным сервером в Word не было ни IP, ни хостера,
+  // ни страны — против критерия готовности спеки §9.4.
+  const html = '<html><body><script src="https://www.google-analytics.com/analytics.js"></script></body></html>';
+  const f = check1of(snapshot({
+    ips: ['5.9.1.1'], country: 'DE', netname: 'HETZNER-NET',
+    geoCountry: 'DE', isCdn: false, confirmedBy: ['rdap', 'ipwho.is'],
+  }, html));
+  assert.equal(f.verdict, 'violation');
+  assert.match(f.summary, /Google Analytics/, 'счётчик — почему нарушение');
+  assert.match(f.summary, /5\.9\.1\.1/, 'IP обязан остаться в отчёте');
+  assert.match(f.summary, /HETZNER-NET/, 'сеть обязана остаться в отчёте');
+  assert.match(f.summary, /страна DE/, 'страна обязана остаться в отчёте');
+  assertNoDbClaim(f.summary);
+});
+
+test('IMPORTANT 2 (регресс): счётчик найден и хостинг в РФ — IP/сеть/страна тоже не теряются', () => {
+  const html = '<html><body><script src="https://www.google-analytics.com/analytics.js"></script></body></html>';
+  const f = check1of(snapshot(RU, html));
+  assert.equal(f.verdict, 'violation');
+  assert.match(f.summary, /Google Analytics/);
+  assert.match(f.summary, /31\.31\.198\.246/, 'IP российского хостинга тоже должен остаться в отчёте');
+  assert.match(f.summary, /REGRU-NETWORK/);
+  assertNoDbClaim(f.summary);
+});
+
+/* ─────────────────── MINOR 1: неверный формат country не даёт обвинить ─────────────────── */
+
+test("MINOR 1 (регресс): country: 'RUSSIAN FEDERATION' — не обвинение", () => {
+  // Полное название страны вместо двухбуквенного ISO-кода (RFC 9083). До
+  // фикса normCountry просто триммил и поднимал регистр, не проверяя формат:
+  // такая строка выглядела бы как «названа не-RU страна», а раз оба
+  // источника (RDAP и геобаза) якобы назвали одну и ту же не-RU страну —
+  // получалось violation с самоопровергающейся фразой «страна RUSSIAN
+  // FEDERATION». hostingFactor обязан защититься сам, тем же принципом, что
+  // и «грязный вход» тесты выше (регистр, пустая строка), не полагаясь на
+  // то, что источник данных (geo.ts) всегда чист.
+  const f = check1of(snapshot({
+    ips: ['5.9.1.1'], country: 'RUSSIAN FEDERATION', netname: 'SOME-NET',
+    geoCountry: 'RUSSIAN FEDERATION', isCdn: false, confirmedBy: ['rdap', 'ipwho.is'],
+  }));
+  assert.notEqual(f.verdict, 'violation', 'не двухбуквенный код — считаем, что источники страну не назвали');
+  assert.doesNotMatch(f.summary, /RUSSIAN FEDERATION/);
+  assertNoDbClaim(f.summary);
+});
+
 /* ─────────────────── грязный вход: hostingFactor обязан нормализовать сам ─────────────────── */
 
 test('грязный вход: country в нижнем регистре не должен ложно обвинить российский сайт', () => {

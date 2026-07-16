@@ -31,7 +31,7 @@ const MAX_IPS_CHECKED = 4;
  * пропущенная запись (здоровый сайт → ложное обвинение), чем лишняя (здоровый
  * сайт → «вручную») — при сомнении добавляем.
  */
-export const CDN_NETNAMES = ['CLOUDFLARE'];
+const CDN_NETNAMES = ['CLOUDFLARE'];
 
 function matchesCdn(text: string | null | undefined): boolean {
   if (!text) return false;
@@ -79,13 +79,29 @@ function str(v: unknown): string | null {
   return typeof v === 'string' && v.trim() ? v.trim() : null;
 }
 
+/**
+ * RFC 9083 требует двухбуквенный ISO-код страны. Не валидировали это —
+ * ответ вида `country: "RUSSIAN FEDERATION"` пролезал как есть и давал
+ * самоопровергающуюся фразу «Сайт размещён за пределами РФ: … страна
+ * RUSSIAN FEDERATION» (MINOR 1 из финального ревью). Живого нарушителя не
+ * встречали — это страховка на случай нестандартного ответа реестра или
+ * геобазы, а не починка воспроизведённого бага.
+ *
+ * Не матчит формат — считаем, что источник страну не назвал: по действующему
+ * правилу (§4.2) это `unknown`, а не повод для обвинения или оправдания.
+ */
+function countryCode(v: unknown): string | null {
+  const s = str(v)?.toUpperCase() ?? null;
+  return s && /^[A-Z]{2}$/.test(s) ? s : null;
+}
+
 type RdapAnswer = { country?: unknown; name?: unknown };
 
 async function lookupRdap(deps: GeoDeps, ip: string) {
   const rdap = (await deps.fetchJson(`https://rdap.org/ip/${ip}`, RDAP_ACCEPT)) as RdapAnswer | null;
   return {
     responded: Boolean(rdap),
-    country: rdap ? str(rdap.country)?.toUpperCase() ?? null : null,
+    country: rdap ? countryCode(rdap.country) : null,
     netname: rdap ? str(rdap.name)?.toUpperCase() ?? null : null,
   };
 }
@@ -143,7 +159,11 @@ export async function resolveHosting(url: string, deps: GeoDeps = defaultDeps): 
   if (cdnHit) {
     // netname взялся из ответа RDAP — значит, RDAP по этому адресу ответил.
     // За CDN спрашивать гео бессмысленно: ответят про узел CDN, а не про сайт.
-    return { ips: checked, country: null, netname: cdnHit.netname, geoCountry: null, isCdn: true, confirmedBy: ['rdap'] };
+    // ip — тот самый адрес, у которого нашлось имя сети CDN, а не любой из
+    // checked (IMPORTANT 1: соседние проверенные адреса могли иметь другое,
+    // непроверенное на CDN имя сети — печатать их как «этот CDN» нечестно).
+    const cdnIp = checked[perIp.indexOf(cdnHit)];
+    return { ips: checked, ip: cdnIp, country: null, netname: cdnHit.netname, geoCountry: null, isCdn: true, confirmedBy: ['rdap'] };
   }
 
   const allRu = perIp.length > 0 && perIp.every((r) => r.country === 'RU');
@@ -189,6 +209,19 @@ export async function resolveHosting(url: string, deps: GeoDeps = defaultDeps): 
   // пример 197.234.240.0/22). Если имя сети есть — CDN по нему уже проверили
   // выше (cdnHit) и не признали, а больше сигналу connection.org взяться
   // неоткуда: сеть с точным именем в RDAP лишним запросом не проверяем.
+  //
+  // MINOR 4 (финальное ревью) предлагал не спрашивать ipwho.is и когда RDAP
+  // не ответил вовсе (flagged.responded === false), раз checks.ts всё равно
+  // отдаёт unknown по правилу «RDAP не ответил» (confirmedBy без 'rdap').
+  // Разобрано и оставлено как есть: это не так для isCdn. checks.ts проверяет
+  // h.isCdn РАНЬШЕ проверки confirmedBy (см. hostingFactor в checks.ts) — при
+  // полном молчании RDAP единственный способ узнать, что адрес всё-таки CDN
+  // (и напечатать в отчёте точную причину «CDN», а не «реестр не ответил»),
+  // это тот же сигнал connection.org. Запрос в этом случае меняет ТЕКСТ
+  // вывода (см. регресс-тест «за CDN, но RDAP по адресу молчал» в
+  // checks.test.ts), хотя сам вердикт (unknown) — нет. Расширять geoUseless
+  // на !flagged.responded нельзя: это отключит connection.org-детекцию CDN
+  // именно тогда, когда RDAP менее всего надёжен (у rdap.org нет SLA).
   const geoUseless = flagged.responded && !flagged.country && Boolean(flagged.netname);
 
   let geoCountry: string | null = null;
@@ -198,7 +231,7 @@ export async function resolveHosting(url: string, deps: GeoDeps = defaultDeps): 
       | { success?: unknown; country_code?: unknown; connection?: { org?: unknown } }
       | null;
     const geoOk = Boolean(geo && geo.success === true);
-    geoCountry = geoOk ? str(geo!.country_code)?.toUpperCase() ?? null : null;
+    geoCountry = geoOk ? countryCode(geo!.country_code) : null;
     if (geoCountry) confirmedBy.push('ipwho.is');
 
     // Диапазон без имени сети в RDAP выдаёт себя через connection.org в ipwho.is.
@@ -206,5 +239,8 @@ export async function resolveHosting(url: string, deps: GeoDeps = defaultDeps): 
     isCdn = matchesCdn(org);
   }
 
-  return { ips: checked, country: flagged.country, netname: flagged.netname, geoCountry, isCdn, confirmedBy };
+  // ip — конкретный адрес, по которому получены country/netname/geoCountry
+  // выше (flaggedIp), а не весь checked: остальные проверенные адреса не
+  // подтверждали ни страну, ни сеть (IMPORTANT 1 из финального ревью).
+  return { ips: checked, ip: flaggedIp, country: flagged.country, netname: flagged.netname, geoCountry, isCdn, confirmedBy };
 }

@@ -829,11 +829,16 @@ npm run check-site https://yarkremlin.ru/ 2>&1 | grep -A 2 '^ 1\.'
 - [ ] **Step 3: Проверить заграничный сайт целиком**
 
 ```bash
-npm run check-site https://example.com/ 2>&1 | grep -E '^ 1\.' -A 2
+npm run check-site https://www.heise.de/ 2>&1 | grep -E '^ 1\.' -A 2
 ```
 
-Ожидается: `[НАРУШЕНИЕ]`, в тексте — страна и источники. Если `вручную` —
-посмотреть, что вернул `resolveHosting` (шаг 5 задачи 3).
+Ожидается: `[НАРУШЕНИЕ]`, в тексте — страна `DE`, сеть `HEISE-NET` и оба
+источника. Если `вручную` — посмотреть, что вернул `resolveHosting`.
+
+Почему именно `heise.de`, а не `example.com`: последний сам сидит за Cloudflare
+и честно уходит в «вручную» — для проверки ветки «заграница» не годится.
+`heise.de` проверен вживую: `country: DE`, `netname: HEISE-NET`, без CDN, оба
+источника сходятся.
 
 - [ ] **Step 4: Линт и типы**
 

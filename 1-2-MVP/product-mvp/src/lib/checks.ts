@@ -197,6 +197,58 @@ function isConsentGated(rawTag: string): boolean {
   return /data-bx-gdpr|gdpr-counter|consent-loader|data-cookie-consent|data-cookieconsent/i.test(rawTag);
 }
 
+/**
+ * Голос за размещение сайта. Спека §4.2.
+ *
+ * Обвиняем ровно в одном случае: источник Б прямо назвал не-российскую страну,
+ * и источник А этому не противоречит. Любой намёк на Россию, любое молчание
+ * источника, любой CDN — `unknown`. Ошибка в сторону «не знаем» стоит одного
+ * пункта в отчёте, ошибка в сторону обвинения — всего доверия.
+ */
+function hostingFactor(h: SiteSnapshot['hosting']): Factor {
+  const name = 'Размещение сайта';
+
+  if (!h || !h.ips.length) {
+    return { name, vote: 'unknown', detail: h?.error ?? 'Где стоит сайт, выяснить не удалось.' };
+  }
+
+  const where = `IP ${h.ips[0]}${h.netname ? `, сеть ${h.netname}` : ''}`;
+
+  if (h.isCdn) {
+    return {
+      name,
+      vote: 'unknown',
+      detail: `Сайт отдаётся через CDN (${h.netname}). За CDN физическое размещение снаружи не определяется: адрес принадлежит посреднику. ${where}.`,
+    };
+  }
+
+  if (h.country === 'RU') {
+    return { name, vote: 'ok', detail: `Сайт размещён в РФ: ${where}, страна RU по данным RIPE.` };
+  }
+
+  if (!h.geoCountry) {
+    return {
+      name,
+      vote: 'unknown',
+      detail: `Страну размещения подтвердить нечем: второй источник не ответил. ${where}.`,
+    };
+  }
+
+  if (h.geoCountry === 'RU') {
+    return {
+      name,
+      vote: 'unknown',
+      detail: `Источники разошлись: реестр${h.country ? ` называет страну ${h.country}` : ' страну не назвал'}, геобаза — RU. ${where}.`,
+    };
+  }
+
+  return {
+    name,
+    vote: 'violation',
+    detail: `Сайт размещён за пределами РФ: ${where}, страна ${h.country ?? h.geoCountry} — подтверждено источниками: ${h.confirmedBy.join(', ')}.`,
+  };
+}
+
 /** 1. Данные не уходят за границу: сервер в РФ, нет Google Analytics, нет GTM. */
 function check1(s: SiteSnapshot): CheckResult {
   const factors: Factor[] = [];
@@ -265,15 +317,7 @@ function check1(s: SiteSnapshot): CheckResult {
     });
   }
 
-  // Гео-размещение сервера требует внешних баз (гео-IP, whois, определение
-  // хостера). В MVP этих источников нет — честно отдаём в ручную проверку,
-  // а не гадаем. PRD §5.3.
-  factors.push({
-    name: 'Физическое размещение сервера в РФ',
-    vote: 'unknown',
-    detail:
-      'Требуется сверка по гео-IP и whois с определением хостера — внешние базы в MVP не подключены. Результат не выдумывается.',
-  });
+  factors.push(hostingFactor(s.hosting));
 
   const verdict = byPresence(factors);
   const found = [gaEv.length && 'Google Analytics', gtmEv.length && 'Google Tag Manager']
@@ -283,12 +327,22 @@ function check1(s: SiteSnapshot): CheckResult {
   return {
     factors,
     verdict,
-    summary:
-      verdict === 'violation'
-        ? `На сайте установлен ${found}. Данные посетителей передаются на серверы за пределами РФ, что противоречит требованию о локализации персональных данных.`
-        : gatedEv.length
-          ? 'Код счётчика Google на сайте есть, но срабатывает он только после согласия. Заявлять передачу данных нельзя — нужна проверка в браузере и сверка размещения сервера.'
-          : 'Google Analytics и Google Tag Manager не обнаружены. Физическое размещение сервера требует ручной сверки по гео-IP и whois.',
+    summary: (() => {
+      const hf = factors.find((f) => f.name === 'Размещение сайта')!;
+      if (verdict === 'violation') {
+        // Печатаем только измеренное. Про базу данных клиента — ни слова:
+        // мы её не видели, а заграница и без того красный флаг.
+        return found
+          ? `На сайте установлен ${found}. Данные посетителей передаются на серверы за пределами РФ, что противоречит требованию о локализации персональных данных.`
+          : `${hf.detail} Закон запрещает запись, накопление и хранение персональных данных граждан РФ с использованием баз данных, находящихся за пределами территории РФ.`;
+      }
+      if (verdict === 'ok') {
+        return `Google Analytics и Google Tag Manager не обнаружены. ${hf.detail}`;
+      }
+      return gatedEv.length
+        ? `Код счётчика Google на сайте есть, но срабатывает он только после согласия. Заявлять передачу данных нельзя — нужна проверка в браузере. ${hf.detail}`
+        : `Google Analytics и Google Tag Manager не обнаружены. ${hf.detail}`;
+    })(),
   };
 }
 

@@ -81,6 +81,31 @@ export type CrawledPage = {
   text: string;
 };
 
+/**
+ * Где физически стоит сайт. Факт, а не вывод: это ровно то, что вернули
+ * источники, без домыслов о базе данных.
+ *
+ * `country` берётся из RDAP и есть только у RIPE-региона: у ответов ARIN поля
+ * страны нет вовсе. Поэтому `null` здесь значит «реестр страну не назвал»,
+ * а не «страны нет».
+ */
+export type HostingFact = {
+  /** Все A-записи домена */
+  ips: string[];
+  /** ISO-код страны из RDAP; null — реестр страну не сообщил */
+  country: string | null;
+  /** Имя сети из RDAP: REGRU-NETWORK, CLOUDFLARENET */
+  netname: string | null;
+  /** Страна по данным ipwho.is; null — не спрашивали или не ответил */
+  geoCountry: string | null;
+  /** netname опознан как CDN — за ним происхождение не видно */
+  isCdn: boolean;
+  /** Какие источники реально ответили: 'rdap', 'ipwho.is' */
+  confirmedBy: string[];
+  /** Человекочитаемая причина, почему факт неполон */
+  error?: string;
+};
+
 export type SiteSnapshot = {
   inputUrl: string;
   finalUrl: string;
@@ -98,6 +123,11 @@ export type SiteSnapshot = {
    * если его дорисовывает скрипт, «ссылки нет» означает лишь «мы не смотрели».
    */
   footerVisible: boolean;
+  /**
+   * Где стоит сайт. Заполняется в `auditSite`, не в `crawlSite`: краул знает
+   * про страницы, гео — про сеть, и мешать их не нужно. `null` — не смотрели.
+   */
+  hosting: HostingFact | null;
   pages: CrawledPage[];
 };
 

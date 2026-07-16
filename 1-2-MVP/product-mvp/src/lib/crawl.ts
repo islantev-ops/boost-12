@@ -262,6 +262,7 @@ export async function crawlSite(inputUrl: string): Promise<SiteSnapshot> {
       cms: null,
       clientRendered: false,
       footerVisible: false,
+      hosting: null,
       pages: [],
     };
   }
@@ -310,6 +311,7 @@ export async function crawlSite(inputUrl: string): Promise<SiteSnapshot> {
     cms: detectCms(home.html),
     clientRendered: detectClientRendered(home.html),
     footerVisible: detectFooter(home.html, home.url),
+    hosting: null,
     pages,
   };
 }

@@ -8,10 +8,14 @@ import './globals.css';
  * Тему ставим до первой отрисовки, иначе светлая тема моргает тёмным:
  * страница успевает нарисоваться с палитрой по умолчанию, и только потом
  * React меняет атрибут. Поэтому это синхронный скрипт в <head>, а не эффект.
+ *
+ * Значение из localStorage сверяем со списком: там может лежать что угодно —
+ * старое имя темы или мусор, — а мы бы поставили это в data-theme и получили
+ * страницу без палитры. «Тёплую» система не подсказывает: только руками.
  */
 const THEME_INIT = `(function(){try{
   var t=localStorage.getItem('theme');
-  if(!t) t=matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';
+  if(['dark','light','warm'].indexOf(t)<0) t=matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';
   document.documentElement.dataset.theme=t;
 }catch(e){document.documentElement.dataset.theme='dark'}})()`;
 

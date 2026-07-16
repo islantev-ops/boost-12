@@ -72,6 +72,12 @@ export const NORMS = {
     gist: 'Не опубликован документ с политикой обработки персональных данных',
     fine: '30–60 тыс ₽',
   },
+  koap_13_11_8: {
+    label: 'КоАП, ст. 13.11 ч. 8',
+    url: 'https://www.consultant.ru/document/cons_doc_LAW_34661/1f421640c6775ff67079ebde06a7d2f6d17b96db/#dst8858',
+    gist: 'Не обеспечена запись и хранение персональных данных россиян в базах на территории РФ',
+    fine: '1–6 млн ₽',
+  },
   koap_20_3_1: {
     label: 'КоАП, ст. 20.3 ч. 1',
     url: 'https://www.consultant.ru/document/cons_doc_LAW_34661/e3620d183bd6d1fe2ab8b0c912809857217325a2/#dst6120',
@@ -148,7 +154,7 @@ export const CHECKS: Check[] = [
     title: 'Данные не уходят за границу',
     subject: 'Передача данных за границу',
     what: 'Сервер в РФ; нет Google Analytics; нет Google Tag Manager',
-    norms: ['fz152_18_5'],
+    norms: ['fz152_18_5', 'koap_13_11_8'],
     method: 'auto',
   },
   {

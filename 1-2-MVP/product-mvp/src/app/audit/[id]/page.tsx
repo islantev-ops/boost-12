@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import DeleteAudit from '@/components/DeleteAudit';
 import FindingCard from '@/components/FindingCard';
-import LetterEditor from '@/components/LetterEditor';
 import { getAudit, parseId } from '@/lib/db';
 import { NORMS } from '@/lib/legal';
 
@@ -27,7 +26,7 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
 
   if (!data) notFound();
 
-  const { audit, findings, letter, anglicisms } = data;
+  const { audit, findings, anglicisms } = data;
   const violations = findings.filter((f) => f.verdict === 'violation').sort((a, b) => b.severity - a.severity);
   const manual = findings.filter((f) => f.verdict === 'manual');
   const ok = findings.filter((f) => f.verdict === 'ok');
@@ -73,7 +72,7 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
 
         {!audit.reachable ? (
           <p className="mt-5 rounded-xl border border-gold/25 bg-gold/5 px-4 py-3 text-[13px] text-gold">
-            {audit.error ?? 'Сайт не открылся.'} Письмо не сгенерировано — писать не о чем.
+            {audit.error ?? 'Сайт не открылся.'}
           </p>
         ) : (
           <div className="mt-6 flex flex-wrap gap-x-8 gap-y-3">
@@ -93,23 +92,12 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
 
       {audit.reachable && (
         <>
-          {/* Письмо */}
-          {letter ? (
-            <section className="space-y-4">
-              <div className="flex items-baseline justify-between gap-4">
-                <h2 className="text-xl font-bold tracking-tight">Готовое письмо</h2>
-                <span className="text-xs text-faint">топ-3 нарушения · правится вручную</span>
-              </div>
-              <div className="frost px-5 py-5">
-                <LetterEditor letter={letter} />
-              </div>
-            </section>
-          ) : (
-            <section className="frost px-5 py-6 text-sm text-muted">
-              <b className="text-ink">Письма нет.</b> Подтверждённых нарушений не найдено — писать
-              не о чем. Это не ошибка: инструмент не выдумывает поводы для контакта.
-            </section>
-          )}
+          {/*
+            Письмо владельцу сайта скрыто на странице аудита — решение продукта от
+            2026-07-16: сначала доводим до идеала Word-отчёт, письмо возвращаем позже.
+            Это не баг: LetterEditor, src/lib/letter.ts, API-роут письма и его генерация
+            в БД остаются нетронутыми — их просто не рендерим здесь.
+          */}
 
           {/* Нарушения */}
           {violations.length > 0 && (

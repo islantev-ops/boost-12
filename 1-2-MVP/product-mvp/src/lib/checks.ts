@@ -217,6 +217,9 @@ function normCountry(raw: string | null | undefined): string | null {
  * и источник А этому не противоречит. Любой намёк на Россию, любое молчание
  * источника, любой CDN — `unknown`. Ошибка в сторону «не знаем» стоит одного
  * пункта в отчёте, ошибка в сторону обвинения — всего доверия.
+ *
+ * Пункт 0, впереди остальных: источник А (RDAP) вообще не ответил — тогда
+ * источник Б в одиночку не обвиняет, даже если он назвал не-РФ страну.
  */
 function hostingFactor(raw: SiteSnapshot['hosting']): Factor {
   const name = 'Размещение сайта';
@@ -238,7 +241,19 @@ function hostingFactor(raw: SiteSnapshot['hosting']): Factor {
     netname: raw.netname && raw.netname.trim() ? raw.netname.trim() : null,
   };
 
-  const where = `IP ${h.ips[0]}${h.netname ? `, сеть ${h.netname}` : ''}`;
+  const where = `IP ${h.ips.join(', ')}${h.netname ? `, сеть ${h.netname}` : ''}`;
+
+  // Пункт 0 (дизайн-документ §4.2, правило 1): RDAP — первоисточник; без его
+  // ответа второй источник (геобаза) не имеет права обвинять в одиночку.
+  // rdap.org — бесплатный сервис без SLA: живой прогон дал не-200 на 2 из 20
+  // быстрых запросов, и без этой проверки вердикт менялся между прогонами.
+  if (!h.confirmedBy.includes('rdap')) {
+    return {
+      name,
+      vote: 'unknown',
+      detail: `Реестр RDAP не ответил, подтвердить размещение нечем. ${where}.`,
+    };
+  }
 
   if (h.isCdn) {
     return {
@@ -249,7 +264,9 @@ function hostingFactor(raw: SiteSnapshot['hosting']): Factor {
   }
 
   if (h.country === 'RU') {
-    return { name, vote: 'ok', detail: `Сайт размещён в РФ: ${where}, страна RU по данным RIPE.` };
+    // Не называем конкретный реестр: rdap.org редиректит куда угодно (RIPE,
+    // APNIC, AFRINIC — проверено вживую), и это не всегда RIPE.
+    return { name, vote: 'ok', detail: `Сайт размещён в РФ: ${where}, страна RU по данным реестра RDAP.` };
   }
 
   if (!h.geoCountry) {
@@ -269,9 +286,10 @@ function hostingFactor(raw: SiteSnapshot['hosting']): Factor {
   }
 
   // Дошли сюда — оба источника согласны, что страна не RU. Но «страна» у них
-  // может быть разной: country у RIPE — это страна регистранта адресного блока,
-  // а не обязательно страна машины. Печатаем ровно то, что сказал каждый
-  // источник, а не выдаём одну страну за согласованную обеими.
+  // может быть разной: country из RDAP — это страна регистранта адресного
+  // блока (какой бы реестр ни ответил), а не обязательно страна машины.
+  // Печатаем ровно то, что сказал каждый источник, а не выдаём одну страну
+  // за согласованную обеими.
   //
   // «Подтверждено источниками» — список тех, кто РЕАЛЬНО назвал страну, а не
   // тех, кто просто ответил (confirmedBy). У ARIN, например, RDAP отвечает, но
@@ -285,10 +303,13 @@ function hostingFactor(raw: SiteSnapshot['hosting']): Factor {
       ? `реестр называет страну ${h.country}, геобаза — ${h.geoCountry}`
       : `страна ${h.geoCountry}`;
 
+  // Один источник — «источником» (ед. число), несколько — «источниками».
+  const sourceWord = namedCountry.length > 1 ? 'источниками' : 'источником';
+
   return {
     name,
     vote: 'violation',
-    detail: `Сайт размещён за пределами РФ: ${where}, ${countryText} — подтверждено источниками: ${namedCountry.join(', ')}.`,
+    detail: `Сайт размещён за пределами РФ: ${where}, ${countryText} — подтверждено ${sourceWord}: ${namedCountry.join(', ')}.`,
   };
 }
 

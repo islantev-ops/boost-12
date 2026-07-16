@@ -53,6 +53,38 @@ test('ARIN не отдаёт country — страну берём у ipwho.is', a
   assert.deepEqual(fact.confirmedBy, ['rdap', 'ipwho.is']);
 });
 
+/* ─────────────────── C1: CDN опознаётся не только по точному имени ─────────────────── */
+
+test('CDN: CLOUDFLARENET-EU опознаётся по вхождению подстроки (C1, регресс)', async () => {
+  // 141.101.64.0/18 и 188.114.96.0/20 — опубликованные диапазоны Cloudflare,
+  // RDAP отдаёт для них имя сети CLOUDFLARENET-EU. При точном сравнении со
+  // строкой 'CLOUDFLARENET' это имя не ловилось, и российский сайт за таким
+  // диапазоном получал ложное обвинение вместо «вручную».
+  let ipwhoCalls = 0;
+  const fact = await resolveHosting('https://example.com/', deps({
+    fetchJson: async (url) => {
+      if (url.includes('rdap.org')) return { name: 'CLOUDFLARENET-EU' };
+      ipwhoCalls += 1;
+      return { success: true, country_code: 'US' };
+    },
+  }));
+  assert.equal(fact.isCdn, true);
+  assert.equal(ipwhoCalls, 0, 'CDN опознан по RDAP — второй источник не нужен');
+});
+
+test('CDN: безымянный диапазон опознаётся по connection.org в ipwho.is (C1, регресс)', async () => {
+  // 197.234.240.0/22 — опубликованный диапазон Cloudflare, RDAP для него не
+  // отдаёт поле name вовсе (но отвечает и называет country). Без сигнала от
+  // ipwho.is такой диапазон проходил как обычный хостинг с реальной страной.
+  const fact = await resolveHosting('https://example.com/', deps({
+    fetchJson: async (url) =>
+      url.includes('rdap.org')
+        ? { country: 'US' } // как у 197.234.240.0/22: country есть, name — нет
+        : { success: true, country_code: 'US', connection: { org: 'Cloudflare, Inc.' } },
+  }));
+  assert.equal(fact.isCdn, true);
+});
+
 test('CDN: опознаём и второй источник не спрашиваем', async () => {
   let ipwhoCalls = 0;
   const fact = await resolveHosting('https://example.com/', deps({
@@ -93,10 +125,37 @@ test('ipwho.is вернул success:false — страну не берём', asy
   assert.deepEqual(fact.confirmedBy, ['rdap']);
 });
 
-test('несколько A-записей: проверяем первую, но сохраняем все', async () => {
+/* ─────────────────── I1: несколько A-записей — проверяем ВСЕ ─────────────────── */
+
+test('несколько A-записей, все в РФ — ok без второго источника (I1)', async () => {
+  let ipwhoCalls = 0;
   const fact = await resolveHosting('https://example.ru/', deps({
     resolve4: async () => ['31.31.198.246', '31.31.198.247'],
-    fetchJson: async (url) => (url.includes('rdap.org') ? RDAP_RU : null),
+    fetchJson: async (url) => {
+      if (url.includes('rdap.org')) return RDAP_RU;
+      ipwhoCalls += 1;
+      return { success: true, country_code: 'RU' };
+    },
   }));
   assert.deepEqual(fact.ips, ['31.31.198.246', '31.31.198.247']);
+  assert.equal(fact.country, 'RU');
+  assert.equal(ipwhoCalls, 0, 'все адреса подтверждены RDAP как RU — второй источник не нужен');
+});
+
+test('несколько A-записей, один за границей — НЕ ok (I1, регресс: раньше проверялась только первая)', async () => {
+  const fact = await resolveHosting('https://example.ru/', deps({
+    // Первый адрес в РФ, второй — в Германии. Старый код смотрел только на
+    // ips[0] и в понедельник давал «ok», а во вторник — обвинение, в
+    // зависимости от того, в каком порядке DNS-ротация отдала записи.
+    resolve4: async () => ['31.31.198.246', '5.9.1.1'],
+    fetchJson: async (url) => {
+      if (url.includes('rdap.org')) {
+        return url.includes('31.31.198.246') ? RDAP_RU : { country: 'DE', name: 'HETZNER-NET' };
+      }
+      return { success: true, country_code: 'DE' };
+    },
+  }));
+  assert.deepEqual(fact.ips, ['31.31.198.246', '5.9.1.1'], 'все A-записи сохраняются');
+  assert.notEqual(fact.country, 'RU', 'хотя бы один адрес за границей — весь сайт не проходит как RU');
+  assert.equal(fact.geoCountry, 'DE');
 });

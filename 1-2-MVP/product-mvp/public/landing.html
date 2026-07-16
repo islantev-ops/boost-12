@@ -9,10 +9,15 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<!-- Тему ставим синхронно, до первой отрисовки: иначе страница успевает моргнуть
+     холодной и только потом перекраситься. Ключ общий с продуктом (домен один),
+     поэтому выбор переезжает между лендингом и /audit. Светлой у лендинга нет —
+     он про космос, — так что 'light' из продукта читаем как холодную. -->
+<script>(function(){try{var t=localStorage.getItem('theme');document.documentElement.dataset.theme=t==='warm'?'warm':'dark'}catch(e){document.documentElement.dataset.theme='dark'}})()</script>
 <style>
 :root{
   --bg:#03060f;--bg-2:#060b18;--panel:#091324;--panel-2:#0c1830;
-  --ink:#eaf3ff;--muted:#8fa2c4;--faint:#556087;
+  --ink:#eaf3ff;--muted:#8fa2c4;--faint:#6977a7;/* был #556087 — 3.29:1 к фону при норме 4.5:1; этим цветом набраны даты и подписи */
   --ice:#8fe0ff;--ice-strong:#4fc4f5;--ice-line:rgba(120,210,255,.4);
   --gold:#ffd98a;--danger:#ff7a86;--danger-glow:rgba(255,122,134,.32);
   --safe:#7ff0c8;--safe-glow:rgba(127,240,200,.28);
@@ -32,14 +37,19 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
 body::after{content:"";position:fixed;top:0;left:0;right:0;height:38vh;z-index:1;pointer-events:none;background:linear-gradient(180deg,rgba(140,205,255,.10),transparent)}
 /* ===== FROST: узоры по краям экрана + вьюга ===== */
 .frostedge{position:fixed;inset:0;z-index:2;pointer-events:none;will-change:transform}
+/* x/y/width/height у фильтра обязательны: по умолчанию область -10%..120%, то есть
+   960x960 при плитке 800x800. stitchTiles сшивает шум по краю ОБЛАСТИ, а фон
+   тайлится по 800 — края плитки не сходятся, и каждые 800px виден шов. */
 .frostedge::before{content:"";position:absolute;inset:0;opacity:.8;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='800'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.016' numOctaves='5' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.8 0 0 0 0 0.92 0 0 0 0 1 0 0 0 -2 1.35'/%3E%3C/filter%3E%3Crect width='800' height='800' filter='url(%23f)'/%3E%3C/svg%3E");
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='800'%3E%3Cfilter id='f' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.016' numOctaves='5' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.8 0 0 0 0 0.92 0 0 0 0 1 0 0 0 -2 1.35'/%3E%3C/filter%3E%3Crect width='800' height='800' filter='url(%23f)'/%3E%3C/svg%3E");
   background-size:800px 800px;background-repeat:repeat;
   -webkit-mask-image:radial-gradient(122% 96% at 50% 50%,transparent 38%,#000 92%);
   mask-image:radial-gradient(122% 96% at 50% 50%,transparent 38%,#000 92%)}
 /* второй слой — более мелкие, чёткие кристаллы по самой кромке */
+/* Область фильтра — как и у слоя выше, иначе шов каждые 800px. Тайл намеренно
+   крупнее самого SVG: 600 растягивается до 800, и кристаллы имеют нужный размер. */
 .frostedge .fx{position:absolute;inset:0;opacity:.6;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='600'%3E%3Cfilter id='c'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.055' numOctaves='3' seed='23' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.86 0 0 0 0 0.95 0 0 0 0 1 0 0 0 -2.6 1.55'/%3E%3C/filter%3E%3Crect width='600' height='600' filter='url(%23c)'/%3E%3C/svg%3E");
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='600'%3E%3Cfilter id='c' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.055' numOctaves='3' seed='23' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.86 0 0 0 0 0.95 0 0 0 0 1 0 0 0 -2.6 1.55'/%3E%3C/filter%3E%3Crect width='600' height='600' filter='url(%23c)'/%3E%3C/svg%3E");
   background-size:800px 800px;background-repeat:repeat;
   -webkit-mask-image:radial-gradient(112% 88% at 50% 50%,transparent 55%,#000 100%);
   mask-image:radial-gradient(112% 88% at 50% 50%,transparent 55%,#000 100%)}
@@ -84,6 +94,17 @@ a.logo:hover{opacity:.82}
 .logo .t b{font-family:var(--display);font-weight:700;font-size:1.05rem;white-space:nowrap;letter-spacing:-.01em}
 .logo .t span{font-size:.62rem;color:var(--ice);letter-spacing:.16em;text-transform:uppercase;white-space:nowrap;opacity:.85;padding-top:5px;border-top:1px solid var(--line-2)}
 @media(max-width:520px){.logo .t b{font-size:.92rem}.logo .t span{font-size:.58rem}}
+/* Тумблер и кнопку держим одной группой: .nav-in — space-between на три части,
+   и четвёртый прямой ребёнок разъехался бы по всей шапке. */
+.nav-act{display:flex;align-items:center;gap:12px;flex:none}
+.theme-tgl{width:34px;height:34px;flex:none;display:grid;place-items:center;cursor:pointer;border-radius:9px;
+  border:1px solid var(--line-2);background:rgba(143,224,255,.06);color:var(--ice);transition:.22s;font-family:inherit}
+.theme-tgl:hover{border-color:var(--ice-line);background:rgba(143,224,255,.13)}
+.theme-tgl svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8}
+/* Показываем значок того, что БУДЕТ после нажатия: в холодной — солнце, в тёплой — снежинка. */
+.theme-tgl .i-snow{display:none}
+[data-theme="warm"] .theme-tgl .i-sun{display:none}
+[data-theme="warm"] .theme-tgl .i-snow{display:block}
 .nav-links{display:flex;align-items:center;gap:26px}
 .nav-links a{color:var(--muted);text-decoration:none;font-size:.92rem;transition:color .2s}.nav-links a:hover{color:var(--ink)}
 .nav-links a.hot{color:var(--ice)}
@@ -220,6 +241,9 @@ a.logo:hover{opacity:.82}
 .game-replay:hover{color:var(--ink);border-color:var(--ice-line);background:rgba(143,224,255,.1)}
 .game-replay.show{display:block}
 /* page cookie bar */
+/* Плашка временно выключена флагом COOKIEBAR_ON в скрипте внизу. Правило нужно
+   потому, что display:flex ниже перебивает браузерное [hidden]{display:none}. */
+.cookiebar[hidden]{display:none}
 .cookiebar{position:fixed;left:16px;right:16px;bottom:16px;z-index:75;display:flex;gap:18px;align-items:center;justify-content:center;flex-wrap:wrap;padding:16px 22px;border-radius:16px;
   background:linear-gradient(160deg,rgba(18,38,68,.98),rgba(6,13,26,.98));backdrop-filter:blur(14px);
   border:1px solid var(--ice);box-shadow:0 18px 44px rgba(0,0,0,.6),0 0 0 1px rgba(143,224,255,.25),0 0 34px rgba(90,200,255,.28);
@@ -381,11 +405,31 @@ body.cl-open #checklist{z-index:55}
 .final{text-align:center;padding:clamp(56px,8vw,110px) 0;position:relative;overflow:hidden}
 .final::before{content:"";position:absolute;inset:0;background:radial-gradient(600px 300px at 50% 40%,rgba(90,200,255,.13),transparent 70%)}
 .final .wrap{position:relative;z-index:2}.final h2{margin-bottom:18px}.final .checker{margin:32px auto 0}
-footer{border-top:1px solid var(--line);padding:54px 0 40px;margin-top:36px;position:relative;z-index:3}
+/* Без border-top: линия шла через весь экран, а подвал сидит в колонке 1180px —
+   она читалась как чужая, ни к чему не привязанная. Отбивку держит padding. */
+footer{padding:54px 0 40px;margin-top:36px;position:relative;z-index:3}
 .foot-grid{display:flex;justify-content:space-between;gap:30px;flex-wrap:wrap;align-items:flex-start}
 footer .src{color:var(--faint);font-size:.84rem;max-width:640px;line-height:1.7}
 footer .src a{color:var(--ice);text-decoration:none;border-bottom:1px solid var(--ice-line)}
 footer .src a:hover{color:#fff}.copyright{color:var(--faint);font-size:.82rem;margin-top:26px}
+/* Кредит разработчика — по образцу подвала nordberg-market.ru: мелкая серая
+   надпись и рядом лого студии, всё целиком ссылка. */
+.developer{display:inline-flex;align-items:center;gap:10px;margin-top:24px;color:#999;font-size:.8rem;text-decoration:none;transition:color .2s}
+.developer:hover,.developer:focus{color:#ccc}
+.developer svg{display:block;flex:none}
+/* Подпись вырезанными буквами. Каждой букве свой стиль пришит инлайном при
+   генерации; здесь только общее. inline-block обязателен — иначе не повернуть. */
+.signature{margin-top:14px;line-height:2.5;user-select:none;cursor:default}
+/* Просвет между буквами обязателен: соседние обрывки бумаги иначе смыкаются
+   в сплошную ленту и записка читается как цветной скотч. */
+.signature span{display:inline-block;transform-origin:50% 60%;margin:0 .07em}
+.signature .sp{width:.55em;margin:0}
+.signature .p{box-shadow:0 2px 5px rgba(0,0,0,.5)}
+/* Дрожь вешаем на translate, а не на transform: поворот буквы лежит в transform
+   инлайном, и анимация его бы затёрла. Эти свойства складываются. */
+.signature:hover span{animation:ransom .3s ease-in-out infinite}
+@keyframes ransom{0%,100%{translate:0 0}25%{translate:-1px -1.5px}50%{translate:1.5px 1px}75%{translate:-1px 1px}}
+@media(prefers-reduced-motion:reduce){.signature:hover span{animation:none}}
 /* ===== МОБИЛЬНАЯ ВЕРСИЯ: переработка ===== */
 /* 1. Шапка: меню убрано, слоган убран — логотип за счёт этого крупный и читаемый */
 @media(max-width:900px){
@@ -483,9 +527,14 @@ footer .src a:hover{color:#fff}.copyright{color:var(--faint);font-size:.82rem;ma
   background:linear-gradient(160deg,rgba(16,32,58,.98),rgba(7,14,28,.98));border:1px solid var(--ice-line);border-radius:14px;
   box-shadow:0 26px 60px rgba(0,0,0,.7);backdrop-filter:blur(16px);font-size:.8rem;line-height:1.45;transition:.35s cubic-bezier(.2,.7,.2,1)}
 .devlog.hide{transform:translateY(calc(100% + 24px));opacity:0;pointer-events:none}
-.dl-h{position:sticky;top:0;display:flex;align-items:center;gap:8px;padding:12px 14px;background:rgba(10,20,38,.98);border-bottom:1px solid var(--line-2)}
+/* z-index обязателен: пункты списка ниже — position:relative, и без него они
+   как более поздние в DOM рисуются поверх залипшей шапки. */
+.dl-h{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:8px;padding:12px 14px;background:rgba(10,20,38,.98);border-bottom:1px solid var(--line-2)}
 .dl-h b{font-weight:700;font-size:.86rem;color:var(--ice)}
 .dl-h .dl-t{margin-left:auto;color:var(--faint);font-size:.7rem}
+/* Отметка времени у каждой записи — по Москве (сервер живёт по UTC, +3). */
+.devlog li time{display:inline-block;margin-right:6px;padding:1px 6px;border-radius:5px;white-space:nowrap;
+  background:rgba(143,224,255,.1);border:1px solid var(--line-2);color:var(--ice);font-size:.67rem;font-weight:700;letter-spacing:.02em}
 .dl-h button{background:none;border:none;color:var(--faint);cursor:pointer;font-size:1rem;padding:0 2px;font-family:inherit}
 .dl-h button:hover{color:#fff}
 .devlog ul{list-style:none;padding:12px 14px;display:grid;gap:9px}
@@ -505,6 +554,292 @@ footer .src a:hover{color:#fff}.copyright{color:var(--faint);font-size:.82rem;ma
    Включать/выключать его на скролле нельзя: пересоздание слоя = рывок. */
 .demo-site,.game-route,.outcome,.pain-wrap{backdrop-filter:blur(12px) saturate(130%);-webkit-backdrop-filter:blur(12px) saturate(130%)}
 @media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}html{scroll-behavior:auto}.gusts{animation:none}}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ТЁПЛО-ХОЛОДНАЯ ТЕМА · «Медь-и-лёд» · финальная спецификация (после судей)
+   Космос не меняется: --bg тот же #03060f. Тепло приходит двумя слоями:
+     СВЕТ    — один слой с адресом 78% -12%. Он поворачивает ТОН всего, до чего
+               достаёт (иней, снег, звёзды, вуаль, панели, блики), и НЕ трогает
+               ни яркость, ни насыщенность. Отсюда: «лёд подсвечен, но не растаял»
+               буквально — тот же шум, та же opacity, то же L.
+     МЕТАЛЛ  — хром интерфейса (медь/латунь) глобально. Это заявленный выбор темы,
+               а не физика: клиент просил тёплую тему, а не симуляцию дня.
+   Всё остальное (лёд: --frost, --line, .frostedge, .gusts, канвасы, .glass::before)
+   остаётся ледяным ВЕЗДЕ, кроме солнечного сектора.
+
+   ЧТО ИСПРАВЛЕНО ПО ЗАМЕЧАНИЯМ (кратко):
+   [1] «Дисциплина адреса только на ambient; --frost/.glass::before/--ice — фильтр
+       на материальном слое». → --frost и .glass::before НЕ переопределяются вовсе.
+       Бронза на верхней грани панели теперь бывает только у панели, которая
+       физически стоит под солнцем: её красит слой света. «Одно солнце на все
+       панели» стало правдой, а карманное солнце у каждой панели исчезло.
+   [2] «Причинность перевёрнута». → Слой наибольшей площади (вся среда) теперь
+       порождается светом, а не перекраской. Медный хром остался — и назван
+       выбором, а не физикой.
+   [3] «Провал 4.5 в солнечном углу (rgba(255,171,102,.34) = 3.88/3.10/3.04)».
+       → Угол не перекрашивается вообще. Ни одна альфа не подымается. Плюс рама
+       ослаблена вдвое: в худшей точке (пиксель угла, под стеклом) стало
+       ink 12.19 · muted 6.89 · faint 4.60 · ice 7.35 · ice-strong 4.90 ·
+       gold 8.65 · danger 4.54 · safe 8.24 — всё ≥4.5. В dark там же faint 3.89.
+   [4] «--frost калибровали без короны, запас 5.16 иллюзорен». → --frost не
+       меняется, калибровать нечего; пересчёт с короной под стеклом ниже.
+   [5] «Три worst-case из трёх разных баз». → Таблица ниже — по одной базе на строку.
+   [6] «Ramp схлопывается под CVD (muted/faint 1.25, протан 1.17)». → 10.27/6.91
+       = 1.48; под симуляцией Viénot 1.44–1.51. Иерархия — только яркость.
+   [7] «--gold ≡ --rime (0.9°), правило ≥35° нарушено дважды». → --rime не заведён
+       (лёд не перекрашивается — его красит свет). --gold ушёл в фиолетовый иней
+       243°: 39° до льда сцены (204°), 148° до меди. Развилки «если рейтинг» нет.
+   [8] «Двойная плотность кристаллов на стыке масок; техника дороже нужного».
+       → Ни масок, ни второй feColorMatrix, ни дубля data:URI: одна строка света.
+   [9] «Тема получает JS-зависимость (канвас читает data-theme)». → Нет JS вообще:
+       частицы загораются, пролетая сквозь корону, потому что слой света лежит
+       над канвасом.
+   [10] «Не аддитивный PR: рефакторинг ~50 площадок базового стиля». → База не
+       трогается ни в одной строке. --frost-solid и --rime не нужны (4+12 площадок
+       отпали). Осталось: :root + 1 слой света + 1 opacity + ~16 правил хрома +
+       4 клона @keyframes. Честно: ~3 часа, регрессионный риск для dark — нулевой.
+
+   ПРЕДУСЛОВИЯ (лендинга в репозитории нет, номера строк — из карты хардкодов):
+   · html::before свободен (в базе ambient живёт на body::before/::after);
+   · body/html красят непрозрачный --bg (blend требует непрозрачного backdrop).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+
+/* ─────────── 1. ТОКЕНЫ ─────────── */
+:root[data-theme="warm"]{
+  /* --bg НЕ меняется. Фундамент угла атаки; все цифры ниже посчитаны на нём. */
+  --bg:#03060f;
+
+  --bg-2:#0d090b;      /* тёплая копоть (R>B). L 0.00305 против 0.00344 у #060b18 —
+                          не «светлее», а «перестал быть синим». Дельта к --bg 1.02:1 */
+  --panel:#0a1120;     /* лёд: холодный navy, чуть менее насыщенный, чем #091324 (L ниже) */
+  --panel-2:#211a1e;   /* металл: бронзовый графит в тени. Пара panel/panel-2 = лёд
+                          рядом с медью, разница 1.11:1 — смена материала, не уровня */
+
+  /* Иерархия текста = ТОЛЬКО яркость (температура на ней смысла не несёт —
+     она не переживает CVD). Шаги 1.77 и 1.48; под Viénot 1.76–1.79 / 1.44–1.51 */
+  --ink:#fbf1e6;       /* 18.16:1 на --bg  (тёплый белый, S 8%) */
+  --muted:#c6b6a6;     /* 10.27:1 на --bg  (тёплый тауп, S 22%) */
+  --faint:#8f97a9;     /*  6.91:1 на --bg  (нейтраль с холодным креном, S 13%).
+                          Заодно чинит баг: базовый #556087 даёт 3.29:1 и провален в dark */
+
+  /* Металл. --ice ведёт ХРОМ (акценты, #progress, обводки, кнопки, вспышки),
+     а не лёд: настоящий лёд зашит значениями и остаётся синим. */
+  --ice:#f4b26a;        /* 11.02:1, hue 31°  (полированная медь) */
+  --ice-strong:#e2833f; /*  7.28:1, hue 25°  (тёмный стоп градиентов, ядро свечений) */
+  --ice-line:rgba(255,176,110,.4);  /* та же альфа .4, что в исходнике */
+  /* --line НЕ меняется: каркас интерфейса — лёд. Самая частая линия страницы
+     остаётся холодной — это то, что не даёт теме стать оранжевым фильтром. */
+  --line-2:rgba(255,178,116,.18);   /* подчёркнутая грань — металл */
+  /* --frost НЕ меняется: стекло — это лёд. Бронзу на верхней грани даёт свет. */
+
+  --gold:#cbc8ff;      /* 12.77:1, hue 243° — ФИОЛЕТОВЫЙ ИНЕЙ (тень на снегу под низким
+                          солнцем — честная физика). Рядом с медью драгоценен холод.
+                          39° до льда сцены (204°), 148° до --ice, 106° до --danger,
+                          84° до --safe. Под солнцем теплеет вместе со всем. */
+  --danger:#ff5e7c;    /* 6.89:1, hue 349°. Поднят с #ff4d6d (6.30) — иначе не проходил
+                          4.5 на раме под стеклом. До меди 42.5°, до --ice-strong 36.2°;
+                          медь в 1.70× светлее (контрастное отношение пары 1.60:1) */
+  --safe:#7ff0c8;      /* НЕ меняется. 14.66:1, hue 159° — 128° от меди. До --danger
+                          169.9° и 2.13:1 по яркости (дейтеранопия 1.8:1 — держится).
+                          Бонус: хардкод rgba(127,240,200,.18) в .db-done (214) — это
+                          ровно --safe, он не разъедется бесплатно. */
+
+  /* Новые каналы — объявлены ТОЛЬКО в тёплой теме, база их не видит */
+  --ice-rgb:244 178 106;         /* канал для альфы: rgb(var(--ice-rgb)/.16) */
+  --ice-strong-rgb:226 131 63;
+  --ice-hi:#fff1e0;              /* вместо дважды зашитого #e6f7ff (96, 202). L 0.895
+                                    против 0.906 — не ярче */
+  --glow-rgb:255 138 62;         /* тот самый безымянный rgba(90,200,255), живущий
+                                    значением в 8 местах. L 0.398 против 0.507 — не ярче */
+  --sun-rgb:255 150 66;          /* само солнце. Одна точка правды на источник */
+  --sun-r:1100px 720px;          /* геометрия адреса = геометрия базовой короны */
+  --sun-at:78% -12%;             /* исходное синее пятно стоит ровно в точке замысла */
+}
+
+/* Гарантия для blend: непрозрачный backdrop под слоем света */
+:root[data-theme="warm"]{background:var(--bg)}
+[data-theme="warm"] body{background-color:var(--bg)}
+
+/* ─────────── КОНТРАСТ: одна база на строку, все токены ───────────
+   поверхность (L)              ink  muted  faint   ice  i-str   gold  danger  safe
+   --bg           (0.0018)    18.16  10.27   6.91 11.02   7.28  12.77   6.89  14.66
+   --bg-2         (0.0031)    17.74  10.03   6.76 10.77   7.12  12.48   6.74  14.33
+   --panel        (0.0057)    16.90   9.55   6.43 10.25   6.78  11.89   6.41  13.65
+   --panel-2      (0.0116)    15.29   8.64   5.82  9.28   6.13  10.76   5.80  12.35
+   --frost/panel  (0.0136)    14.80   8.37   5.63  8.98   5.94  10.41   5.62  11.95
+   --frost/panel-2(0.0156)    14.35   8.11   5.46  8.71   5.76  10.10   5.45  11.59
+   --frost/корона (0.0170)    14.04   7.94   5.35  8.52   5.63   9.88   5.33  11.34
+   .db-cookie .98 (0.0188)    13.69   7.74   5.21  8.31   5.49   9.63   5.20  11.05
+   .cl-pop touch  (0.0212)    13.22   7.48   5.03  8.02   5.30   9.30   5.02  10.68
+   рама+стекло,худшая точка
+   холодный угол  (0.0276)    12.12   6.85   4.62  7.36   4.86   8.53   4.60   9.79
+   солнечный угол (0.0271)    12.19   6.89   4.60  7.35   4.90   8.65   4.54   8.24
+   Минимум по таблице 4.54 — провалов 4.5 нет.
+   Голая рама (без панели) текст не носит ни в одной теме: в dark на ней
+   --muted 3.16, в warm 5.07/4.90. На голой раме допустим только --ink (9.0/8.7). */
+
+
+/* ─────────── 2. СОЛНЦЕ: один слой, один адрес, ноль яркости ─────────── */
+
+/* Диагональ: корона (не перекрашиваем — на неё светят) + холодный полюс-противовес.
+   Значение исходного пятна перенесено дословно. */
+[data-theme="warm"] body::before{
+  background:
+    radial-gradient(var(--sun-r) at var(--sun-at), rgba(90,180,255,.16), transparent 60%),
+    radial-gradient(900px 700px at 6% 96%, rgba(70,150,255,.13), transparent 58%);
+}
+/* body::after (вуаль на верхние 38vh) НЕ трогаем: слой света лежит выше и сам
+   поворачивает её тон — верх-лево остаётся ледяным, верх-право становится медным. */
+
+/* СЛОЙ СВЕТА. mix-blend-mode:hue = SetLum(SetSat(солнце, Sat(фон)), Lum(фон)):
+   берётся только ТОН источника; насыщенность и светлота фона сохраняются.
+   Следствия, ради которых всё и сделано:
+   · заливки не будет: чёрный космос (Sat 0.05) остаётся чёрным — поворот тона
+     не умеет добавить ни яркости, ни насыщенности;
+   · иней не тает: тот же шум, та же opacity, та же геометрия — меняется тон;
+   · дрейф WCAG-яркости на нашей палитре: −17.6%…+2.6% (максимум в плюс — 2.6%
+     на --panel-2, это <1% контрастного отношения). Практически весь дрейф — в минус,
+     т.е. в сторону БОЛЬШЕГО контраста;
+   · частицы канваса и пунктир курса загораются, пролетая сквозь корону, без JS;
+   · медный хром под солнцем не меняется (тон уже 31°), тексты (S 8–13%) — тоже. */
+@supports (mix-blend-mode:hue){
+  [data-theme="warm"] html::before{
+    content:''; position:fixed; inset:0; z-index:9990; pointer-events:none;
+    background:radial-gradient(var(--sun-r) at var(--sun-at),
+      rgb(var(--sun-rgb)) 0, rgb(var(--sun-rgb)/.55) 34%, transparent 62%);
+    mix-blend-mode:hue;
+  }
+}
+/* Цена решения, названная вслух: в солнечном секторе (правый верх экрана, до
+   y≈38vh) смысловые цвета теплеют вместе со всем — свет не разбирает семантику.
+   Контраст при этом держится: на frost/panel safe 11.95→10.11, danger 5.62→5.56,
+   faint 5.63→5.65, ink 14.80→14.95. Если мята в секторе неприемлема — z-index
+   слоя опускается до 1, тогда свет красит только среду (космос, иней, снег, вуаль). */
+
+/* Телефон: адрес обязан остаться адресом, иначе верх экрана — сплошной фильтр */
+@media (max-width:720px){ :root[data-theme="warm"]{--sun-r:86vw 26vh} }
+
+
+/* ─────────── 3. .frostedge / .gusts / канвасы: НЕ ТРОГАЕМ ───────────
+   .frostedge::before (39, шум .8) и .fx (47, кристаллы .6) — ни одной правки:
+     ни масок, ни инверсии R/B, ни второго data:URI. Медными кристаллы становятся
+     там, куда достаёт свет, — и остаются тем же шумом той же плотности.
+     Кольца удвоенной плотности на стыке нет, потому что стыка нет.
+   .frostedge::after (53/54/57/60) — цвета не трогаем: температурный циферблат
+     рисует свет (правый верх медный, левый низ ледяной, ребро — перелив).
+   .gusts — полосы вьюги остаются холодными; теплеет только та вьюга, что
+     пересекает корону. Канвасы (865/868/878/879) — тоже: звёзды, снежинки и
+     сетка созвездий холодные везде, кроме солнечного сектора. */
+
+/* Единственная правка рамы — ослабление вдвое. Это уменьшение яркости
+   (фильтром стать не может) и одновременно фикс доступности, которого нет в dark:
+   в худшей точке под стеклом faint 3.89 → 4.62, danger 3.88 → 4.60, muted 5.78 → 6.85.
+   По замыслу читается как «иней в углах отступил под подошедшим солнцем». */
+[data-theme="warm"] .frostedge::after{opacity:.5}
+
+
+/* ─────────── 4. ХРОМ: где медь зашита мимо переменных ───────────
+   Всё аддитивно: ни одна строка базового стиля не переписывается, отгруженный
+   dark не трогается, отдельный визуальный прогон dark не нужен. */
+
+/* CTA (96/97) и кнопка «Принять» в демо-плашке (202).
+   Тёмный текст на кнопке: 7.28:1 на самом тёмном стопе, 18.24:1 на --ice-hi */
+[data-theme="warm"] .btn-primary{
+  background:linear-gradient(135deg,var(--ice-hi),var(--ice) 45%,var(--ice-strong));
+  box-shadow:0 6px 26px rgb(var(--glow-rgb)/.32)}
+[data-theme="warm"] .btn-primary:hover{box-shadow:0 12px 40px rgb(var(--glow-rgb)/.5)}
+[data-theme="warm"] .db-cookie button{background:linear-gradient(135deg,var(--ice-hi),var(--ice))}
+
+/* Точные дубли --ice, вынесенные инлайн только ради альфы (138, 197, 198, 294, 354, 476) */
+[data-theme="warm"] .card .k{background:radial-gradient(circle at 30% 25%,
+  rgb(var(--ice-rgb)/.26),rgb(var(--ice-strong-rgb)/.05))}
+[data-theme="warm"] .fixbtn{background:rgb(var(--ice-rgb)/.1)}
+[data-theme="warm"] .fixbtn:hover{background:rgb(var(--ice-rgb)/.2)}
+[data-theme="warm"] .cl-num{background:radial-gradient(circle at 30% 28%,
+  rgb(var(--ice-rgb)/.24),rgb(var(--ice-strong-rgb)/.04))}
+[data-theme="warm"] .ex-btn{background:rgb(var(--ice-rgb)/.16)}
+@media (hover:none){[data-theme="warm"] .cl-close{background:rgb(var(--ice-rgb)/.16)}}
+
+/* Группа 1 чек-листа (297/303). Порядок слоёв как в базе: подтон поверх --frost */
+[data-theme="warm"] .cl-item[data-g="1"]{
+  border-left-color:rgb(var(--ice-rgb)/.6);
+  background:linear-gradient(100deg,rgb(var(--ice-rgb)/.075),transparent 42%),var(--frost)}
+[data-theme="warm"] .cl-item[data-g="1"] .cl-num{
+  color:var(--ice); border-color:rgb(var(--ice-rgb)/.45);
+  background:radial-gradient(circle at 30% 28%,rgb(var(--ice-rgb)/.22),transparent)}
+
+/* Безымянный «голубой glow» rgba(90,200,255) → медный ореол (187/233/293/324/479).
+   box-shadow переопределяется целиком — чёрные тени сохранены дословно;
+   inset-блики (rgba(200,235,255)) оставлены ЛЕДЯНЫМИ: это стекло, а не металл. */
+[data-theme="warm"] .db-cookie{box-shadow:0 16px 34px rgba(0,0,0,.55),
+  0 0 0 1px rgb(var(--ice-rgb)/.25),0 0 30px rgb(var(--glow-rgb)/.3)}
+[data-theme="warm"] .cookiebar{box-shadow:0 18px 44px rgba(0,0,0,.6),
+  0 0 0 1px rgb(var(--ice-rgb)/.25),0 0 34px rgb(var(--glow-rgb)/.28)}
+[data-theme="warm"] .cl-item:hover,[data-theme="warm"] .cl-item:focus-visible,
+[data-theme="warm"] .cl-item.open{box-shadow:0 0 26px rgb(var(--glow-rgb)/.16),
+  inset 0 1px 0 rgba(200,235,255,.2)}
+[data-theme="warm"] .cl-pop{box-shadow:0 0 0 1px rgb(var(--ice-rgb)/.22),
+  0 0 40px rgb(var(--glow-rgb)/.16),inset 0 1px 0 rgba(200,235,255,.2)}
+@media (hover:none){[data-theme="warm"] .cl-pop{
+  box-shadow:0 0 0 1px rgb(var(--ice-rgb)/.4),0 0 60px rgb(var(--glow-rgb)/.3)}}
+/* Непрозрачные плашки (186/232/322/478) НЕ трогаем: тёмно-синее стекло — это лёд.
+   Поэтому --frost-solid не нужен, и четыре разъехавшихся хардкода не сводятся
+   ценой правки отгруженного dark. */
+
+/* Анимации: базовые @keyframes зашиты значением. Клонируем и подменяем имя —
+   база остаётся рабочей (182, 211/212, 237, 485) */
+@keyframes chkflash-warm{
+  0%{background:rgb(var(--ice-rgb)/.3);border-radius:8px;
+     box-shadow:0 0 0 0 rgb(var(--ice-rgb)/.8),0 0 26px rgb(var(--ice-rgb)/.9)}
+  60%{background:rgb(var(--ice-rgb)/.12)}
+  100%{background:transparent;box-shadow:0 0 0 16px rgb(var(--ice-rgb)/0)}}
+[data-theme="warm"] .df-check.appear{animation-name:chkflash-warm}
+
+@keyframes boxblink-warm{
+  0%,100%{box-shadow:0 0 0 0 rgb(var(--glow-rgb)/.75),0 0 12px rgb(var(--ice-rgb)/.6);
+          filter:brightness(1.2)}
+  50%{box-shadow:0 0 0 10px rgb(var(--glow-rgb)/0),0 0 28px rgb(var(--ice-rgb)/1);
+      filter:brightness(1.6)}}
+[data-theme="warm"] .df-check.pulse .box{animation-name:boxblink-warm}
+
+@keyframes ckglow-warm{
+  0%,100%{box-shadow:0 18px 44px rgba(0,0,0,.6),0 0 0 1px rgb(var(--ice-rgb)/.25),
+          0 0 34px rgb(var(--glow-rgb)/.28)}
+  50%{box-shadow:0 18px 44px rgba(0,0,0,.6),0 0 0 1px rgb(var(--ice-rgb)/.5),
+      0 0 52px rgb(var(--glow-rgb)/.55)}}
+[data-theme="warm"] .cookiebar.show{animation-name:ckglow-warm}
+
+@keyframes ipulse-warm{
+  0%,100%{box-shadow:0 0 0 0 rgb(var(--glow-rgb)/.55)}
+  70%{box-shadow:0 0 0 10px rgb(var(--glow-rgb)/0)}}
+@media (hover:none){[data-theme="warm"] .cl-i{animation-name:ipulse-warm}}
+
+/* Полярная звезда (574/578) стоит ровно в точке солнца — она и есть источник.
+   Правим явно: гарантии, что SVG попадёт в радиус слоя света, нет. */
+[data-theme="warm"] #pole stop:nth-child(2){stop-color:#ffd0a0}
+[data-theme="warm"] #pole stop:last-child{stop-color:var(--ice-strong)}
+[data-theme="warm"] .course circle[fill="url(#pole)"]{
+  filter:drop-shadow(0 0 14px rgb(var(--glow-rgb)/.9))}
+/* Пунктир курса (575) не трогаем: SVG-градиент по stroke требует правки разметки,
+   а слой света и так греет линию по мере приближения к звезде. */
+
+/* ─────────── ПРАВИЛО ТЕМЫ ───────────
+   Различимость: пара токенов ОДНОЙ роли обязана иметь ≥35° по тону ИЛИ ≥2:1 по
+   яркости. Акценты: ice/gold 148°, ice/danger 42.5°, ice/safe 127.5°,
+   gold/danger 105.5°, gold/safe 84.5°, danger/safe 169.9° + 2.13:1.
+   Исключение одно и названо: ice/ice-strong (6.3°) — это два стопа одного
+   градиента, они никогда не значат разное.
+   Текст разводится только яркостью: 18.16 → 10.27 → 6.91.
+   --muted и --ice лежат в одном тоне (2.4°) и разведены насыщенностью 22% против
+   86% — ровно так же, как в отгруженной холодной теме (--ice #8fe0ff и синий текст).
+
+   ─────────── БАГ, КОТОРЫЙ ЖИВЁТ В DARK ───────────
+   Базовый --faint #556087 = 3.29:1 на --bg. Тёплая тема его не наследует, но в
+   dark он остаётся. Починка — одна строка, меняет отгруженное, поэтому вынесена:
+   :root{--faint:#8b97b1}   -- 6.90:1, тот же тон 221°, S 20%
+*/
 </style>
 </head>
 <body>
@@ -517,7 +852,13 @@ footer .src a:hover{color:#fff}.copyright{color:var(--faint);font-size:.82rem;ma
   <div class="nav-in">
     <a class="logo" href="#" id="toTop" aria-label="В начало страницы"><span class="mark">✦</span><span class="t"><b>Полярная звезда</b><span>Курс мимо штрафов</span></span></a>
     <div class="nav-links"><a href="#fines">Штрафы</a><a href="#how">Как работает</a><a href="#value">Что получите</a><a href="#gamegrid" class="hot">✦ Демо-игра</a><a href="#checklist">Чек-лист</a></div>
-    <a href="#check" class="btn btn-primary">Проверить сайт</a>
+    <div class="nav-act">
+      <button class="theme-tgl" id="themeTgl" type="button">
+        <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17a5 5 0 0110 0"/><path d="M2 17h3M19 17h3M12 5v3M5.6 8.6l1.5 1.5M18.4 8.6l-1.5 1.5" stroke-linecap="round"/><path d="M2 21h20" stroke-linecap="round"/></svg>
+        <svg class="i-snow" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M4.2 6.5l15.6 9M19.8 6.5l-15.6 9" stroke-linecap="round"/><path d="M9 4l3 2 3-2M9 20l3-2 3 2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <a href="#check" class="btn btn-primary">Проверить сайт</a>
+    </div>
   </div>
 </nav>
 
@@ -779,23 +1120,41 @@ footer .src a:hover{color:#fff}.copyright{color:var(--faint);font-size:.82rem;ma
     <p class="src">Суммы штрафов приведены по <a href="https://www.consultant.ru/document/cons_doc_LAW_34661/1f421640c6775ff67079ebde06a7d2f6d17b96db/" target="_blank" rel="noopener">ст. 13.11 КоАП РФ</a> — сверено с действующей редакцией от <b>04.07.2026</b>. Оборотный штраф за повторную утечку введён ФЗ-420 от 30.11.2024 (<a href="https://www.consultant.ru/legalnews/28492/" target="_blank" rel="noopener">обзор</a>). Законодательство о ПДн меняется — перед публикацией сверяйтесь с первоисточником. Требования к иностранным словам на сайтах — <a href="https://www.consultant.ru/law/hotdocs/89768.html" target="_blank" rel="noopener">ФЗ № 168-ФЗ</a>, с 01.03.2026.</p>
   </div>
   <div class="copyright">© 2026 Полярная звезда — аудит сайтов на соответствие законам РФ. Суммы штрафов требуют сверки с актуальной редакцией.</div>
+
+  <a class="developer" href="https://redstar.agency" target="_blank" rel="noopener nofollow" title="Разработано в Редстар">
+    <span>Разработано в</span>
+    <span class="developer__logo"><svg width="74" height="15" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill="#D92C04" d="M7.306 13.902c4.034 0 7.305-3.112 7.305-6.951C14.611 3.112 11.341 0 7.306 0S0 3.112 0 6.95c0 3.84 3.27 6.952 7.306 6.952z"></path><path fill="#fff" d="M24.216 3.072c.923 0 1.692.292 2.308.875.625.583.937 1.308.937 2.173 0 .858-.312 1.582-.937 2.174-.616.583-1.385.875-2.308.875h-2v3.18h-1.61V3.072h3.61zm0 4.665c.475 0 .867-.15 1.175-.45.308-.31.461-.698.461-1.167 0-.468-.154-.852-.461-1.153-.308-.309-.7-.463-1.175-.463h-2v3.233h2zm5.241 1.909c.112.503.368.892.77 1.166.4.265.89.398 1.468.398.802 0 1.404-.274 1.805-.822l1.245.69c-.69.962-1.712 1.444-3.064 1.444-1.138 0-2.056-.327-2.756-.981-.699-.663-1.049-1.498-1.049-2.505 0-.99.345-1.816 1.035-2.478.69-.672 1.576-1.007 2.658-1.007 1.026 0 1.865.34 2.518 1.02.662.68.993 1.507.993 2.478 0 .15-.018.35-.056.597h-5.567zm-.014-1.166h4.113c-.103-.54-.34-.946-.714-1.22a2.079 2.079 0 0 0-1.287-.41c-.56 0-1.026.145-1.399.437-.373.291-.61.689-.713 1.193zm12.848 2.518h.938v3.127h-1.483V12.35h-4.798v1.776h-1.483v-3.127h.853c.43-.575.644-1.374.644-2.4V5.724h5.33v5.275zm-4.308 0h2.826V7.035h-2.364v1.564c0 .945-.154 1.745-.462 2.399zm9.5 1.524c-1.053 0-1.934-.336-2.643-1.008-.7-.671-1.05-1.497-1.05-2.478 0-.99.35-1.816 1.05-2.478.709-.672 1.59-1.007 2.644-1.007.68 0 1.3.154 1.86.463.56.31.98.725 1.259 1.246l-1.3.716a1.686 1.686 0 0 0-.728-.742 2.147 2.147 0 0 0-1.105-.279c-.616 0-1.133.2-1.553.597-.41.397-.616.892-.616 1.484s.206 1.087.616 1.485c.42.397.937.596 1.553.596.41 0 .778-.093 1.105-.278.335-.186.587-.433.755-.743l1.301.703c-.298.53-.727.95-1.287 1.259a3.78 3.78 0 0 1-1.86.464zm9.515-6.8v1.38h-2.28v5.247h-1.51V7.101h-2.295V5.723h6.085zm6.289 0h1.51v6.627h-1.51v-.954c-.57.751-1.385 1.127-2.448 1.127a3.38 3.38 0 0 1-2.462-1.008c-.681-.68-1.021-1.506-1.021-2.478 0-.98.34-1.807 1.02-2.478A3.379 3.379 0 0 1 60.84 5.55c1.063 0 1.879.37 2.448 1.113v-.941zm-3.791 4.838c.42.398.946.597 1.58.597.635 0 1.161-.2 1.581-.597.42-.406.63-.914.63-1.524s-.21-1.113-.63-1.51c-.42-.407-.946-.61-1.58-.61-.635 0-1.162.203-1.581.61-.42.397-.63.9-.63 1.51s.21 1.118.63 1.524zm11.02-5.01c.961 0 1.782.34 2.463 1.021.68.672 1.021 1.493 1.021 2.465 0 .98-.34 1.807-1.021 2.479a3.38 3.38 0 0 1-2.462 1.007c-1.063 0-1.88-.371-2.448-1.114V15h-1.51V5.723h1.51v.954c.569-.75 1.385-1.126 2.448-1.126zm-1.818 5.01c.42.398.947.597 1.581.597s1.161-.2 1.58-.597c.42-.406.63-.914.63-1.524s-.21-1.113-.63-1.51c-.419-.407-.946-.61-1.58-.61-.634 0-1.16.203-1.58.61-.42.397-.63.9-.63 1.51s.21 1.118.63 1.524z"></path></svg></span>
+  </a>
+
+  <div class="signature" role="img" aria-label="Разработал Сашка Ислантьев прикинь??"><span class="p" style="font-family:Verdana,sans-serif;font-size:1.33em;font-weight:700;transform:rotate(-6.4deg) translateY(0.4px);color:#111;background:#efe9dc;padding:.02em .16em;font-style:italic">Р</span><span style="font-family:Impact,fantasy;font-size:1.29em;font-weight:900;transform:rotate(-8.7deg) translateY(-1.9px);color:#7ff0c8">а</span><span style="font-family:'Courier New',monospace;font-size:1.08em;font-weight:700;transform:rotate(-2.7deg) translateY(1.1px);color:#7ff0c8;font-style:italic">з</span><span style="font-family:'Times New Roman',serif;font-size:0.87em;font-weight:800;transform:rotate(-13.7deg) translateY(0.6px);color:#ffd98a">р</span><span class="p" style="font-family:Georgia,serif;font-size:1.10em;font-weight:900;transform:rotate(-0.6deg) translateY(1.5px);color:#111;background:#d8d2c4;padding:.02em .16em;font-style:italic">а</span><span class="p" style="font-family:'Arial Black',sans-serif;font-size:1.45em;font-weight:900;transform:rotate(-1.1deg) translateY(-2.5px);color:#111;background:#ff7a86;padding:.02em .16em">б</span><span style="font-family:Verdana,sans-serif;font-size:1.27em;font-weight:800;transform:rotate(7.8deg) translateY(-1.6px);color:#7ff0c8">о</span><span class="p" style="font-family:'Trebuchet MS',sans-serif;font-size:1.00em;font-weight:800;transform:rotate(0.4deg) translateY(2.0px);color:#111;background:#7ff0c8;padding:.02em .16em">т</span><span class="p" style="font-family:'Palatino Linotype',serif;font-size:0.97em;font-weight:600;transform:rotate(1.4deg) translateY(-2.2px);color:#111;background:#ff7a86;padding:.02em .16em">а</span><span class="p" style="font-family:'Trebuchet MS',sans-serif;font-size:1.41em;font-weight:800;transform:rotate(-7.5deg) translateY(-1.5px);color:#111;background:#e4ddcb;padding:.02em .16em;font-style:italic">л</span><span class="sp"></span><span class="p" style="font-family:'Arial Black',sans-serif;font-size:1.40em;font-weight:600;transform:rotate(-7.2deg) translateY(-0.1px);color:#111;background:#ffd98a;padding:.02em .16em;font-style:italic">С</span><span class="p" style="font-family:'Trebuchet MS',sans-serif;font-size:1.24em;font-weight:700;transform:rotate(-5.7deg) translateY(1.8px);color:#111;background:#efe9dc;padding:.02em .16em">а</span><span class="p" style="font-family:Verdana,sans-serif;font-size:1.08em;font-weight:900;transform:rotate(-5.3deg) translateY(-2.9px);color:#111;background:#d8d2c4;padding:.02em .16em">ш</span><span class="p" style="font-family:'Courier New',monospace;font-size:1.50em;font-weight:800;transform:rotate(8.0deg) translateY(-1.4px);color:#111;background:#d8d2c4;padding:.02em .16em">к</span><span class="p" style="font-family:'Palatino Linotype',serif;font-size:0.94em;font-weight:400;transform:rotate(-1.2deg) translateY(0.6px);color:#111;background:#d8d2c4;padding:.02em .16em;font-style:italic">а</span><span class="sp"></span><span style="font-family:'Palatino Linotype',serif;font-size:1.47em;font-weight:600;transform:rotate(-11.4deg) translateY(0.0px);color:#8fe0ff">И</span><span class="p" style="font-family:Verdana,sans-serif;font-size:0.90em;font-weight:400;transform:rotate(-12.7deg) translateY(0.1px);color:#111;background:#7ff0c8;padding:.02em .16em">с</span><span style="font-family:'Arial Black',sans-serif;font-size:1.27em;font-weight:400;transform:rotate(8.3deg) translateY(-1.0px);color:#ffd98a;font-style:italic">л</span><span class="p" style="font-family:Impact,fantasy;font-size:1.04em;font-weight:700;transform:rotate(2.6deg) translateY(1.0px);color:#111;background:#ff7a86;padding:.02em .16em">а</span><span style="font-family:Verdana,sans-serif;font-size:1.02em;font-weight:800;transform:rotate(-7.0deg) translateY(0.6px);color:#ffd98a;font-style:italic">н</span><span class="p" style="font-family:'Trebuchet MS',sans-serif;font-size:1.35em;font-weight:600;transform:rotate(3.1deg) translateY(2.1px);color:#111;background:#d8d2c4;padding:.02em .16em;font-style:italic">т</span><span style="font-family:'Courier New',monospace;font-size:1.31em;font-weight:700;transform:rotate(8.1deg) translateY(-2.5px);color:#7ff0c8">ь</span><span class="p" style="font-family:'Comic Sans MS',cursive;font-size:1.19em;font-weight:800;transform:rotate(11.1deg) translateY(1.4px);color:#111;background:#efe9dc;padding:.02em .16em;font-style:italic">е</span><span class="p" style="font-family:Georgia,serif;font-size:1.18em;font-weight:700;transform:rotate(-0.8deg) translateY(-0.3px);color:#111;background:#fff;padding:.02em .16em;font-style:italic">в</span><span class="sp"></span><span class="p" style="font-family:'Arial Black',sans-serif;font-size:1.49em;font-weight:400;transform:rotate(-12.7deg) translateY(1.8px);color:#111;background:#ffd98a;padding:.02em .16em">п</span><span style="font-family:'Comic Sans MS',cursive;font-size:1.13em;font-weight:700;transform:rotate(-0.6deg) translateY(0.9px);color:#8fe0ff">р</span><span class="p" style="font-family:Verdana,sans-serif;font-size:1.25em;font-weight:900;transform:rotate(-11.5deg) translateY(1.4px);color:#111;background:#ff7a86;padding:.02em .16em;font-style:italic">и</span><span class="p" style="font-family:Impact,fantasy;font-size:1.48em;font-weight:800;transform:rotate(1.4deg) translateY(-2.2px);color:#111;background:#e4ddcb;padding:.02em .16em">к</span><span class="p" style="font-family:Tahoma,sans-serif;font-size:0.86em;font-weight:700;transform:rotate(2.1deg) translateY(-2.8px);color:#111;background:#fff;padding:.02em .16em">и</span><span class="p" style="font-family:Impact,fantasy;font-size:1.13em;font-weight:900;transform:rotate(-9.1deg) translateY(2.9px);color:#111;background:#fff;padding:.02em .16em">н</span><span class="p" style="font-family:'Comic Sans MS',cursive;font-size:0.91em;font-weight:900;transform:rotate(-3.2deg) translateY(-3.0px);color:#111;background:#e4ddcb;padding:.02em .16em;font-style:italic">ь</span><span class="p" style="font-family:Tahoma,sans-serif;font-size:1.28em;font-weight:900;transform:rotate(-3.4deg) translateY(-2.4px);color:#111;background:#e4ddcb;padding:.02em .16em">?</span><span style="font-family:'Times New Roman',serif;font-size:0.87em;font-weight:800;transform:rotate(-13.9deg) translateY(1.2px);color:#eaf3ff">?</span></div>
 </div></footer>
 
 <div class="cl-overlay" id="clOverlay" aria-hidden="true"></div>
 
 <!-- ===== DEV: панель изменений. ВРЕМЕННАЯ — удалить перед публикацией ===== -->
-<button class="dl-open" id="dlOpen">✦ Что изменилось</button>
-<div class="devlog" id="devlog">
-  <div class="dl-h"><b>✦ Только новое</b><span class="dl-t">16:40</span><button id="dlClose" title="Свернуть">✕</button></div>
+<button class="dl-open show" id="dlOpen">✦ Что изменилось</button>
+<div class="devlog hide" id="devlog">
+  <div class="dl-h"><b>✦ Только новое</b><span class="dl-t">15.07, 22:41 МСК</span><button id="dlClose" title="Свернуть">✕</button></div>
   <ul>
-    <li><b>Лендинг стал главной страницей продукта.</b> Он на «/», инструмент — на «/audit», разбор аудита — на «/audit/номер»</li>
-    <li><b>«Проложить курс» больше не притворяется.</b> Кнопка писала «Сканируем куки…», «Курс построен» и ничего не проверяла. Теперь она уводит в инструмент и передаёт ему ссылку — проверка стартует сама</li>
-    <li>🩹 <b>Пруф был ненаходимым.</b> В отчёте стояло <code>&lt;script async="" src=…&gt;</code>, а на сайте написано <code>async</code> — эту строку нельзя было найти поиском. Теперь фрагмент вырезается из исходника дословно, с номером строки</li>
-    <li>🩹 <b>«Эксклюзивный» больше не англицизм.</b> Это русское слово в словарях. Кириллицу не помечаем вовсе: решать, освоено слово или нет, можно только по утверждённым словарям, а их у нас нет. Ищем латиницу — SALE, PRICE, NEW</li>
-    <li>🩹 <b>Плашка куки проверяется сама.</b> Если она есть в разметке — разбираем состав: кнопка согласия, ссылка на Политику, ссылка на Политику куки, упоминание Метрики. «Вручную» остаётся только когда плашку рисует скрипт</li>
-    <li>🩹 <b>Заголовки не утверждают того, чего мы не знаем.</b> Было «Уведомление в РКН подано» рядом с жёлтым «требует ручной проверки». Стало «Уведомление в РКН» — факт сообщает вердикт. Так же с «Передача данных за границу»</li>
-    <li><b>Каждый вывод ведёт на документ.</b> Написали «Политика опубликована» — вот ссылка. Написали «в Политике рассылка не описана» — вот та Политика, которую мы прочитали</li>
-    <li>⚠️ <b>Демо-записи помечены.</b> example-shop.ru и остальные — вымышленные сайты с придуманными пруфами. Раньше они выглядели как настоящий результат</li>
+    <li><time>15.07 22:41</time>☀️ <b>Тёплая тема: «медь-и-лёд».</b> Тумблер в шапке. Космос остаётся тем же чёрным, тёплым становится только металл интерфейса — акценты, кнопки, обводки. Стекло панелей, каркас и иней остаются ледяными: они и не дают теме превратиться в оранжевый фильтр</li>
+    <li><time>15.07 22:41</time><b>Солнце — один слой света, без JS.</b> Лежит справа сверху и поворачивает только <i>тон</i> того, до чего достаёт (<code>mix-blend-mode:hue</code>), не трогая ни яркость, ни насыщенность. Поэтому чёрный космос остаётся чёрным — у него нечего поворачивать, — а иней подсвечен, но не растаял: тот же шум, та же плотность. Снежинки и звёзды теплеют, пролетая сквозь корону, сами собой</li>
+    <li><time>15.07 22:41</time><b>Выбор темы общий с продуктом.</b> Переключил здесь — на «/audit» тоже тёплая. В продукте тем три: тёмная → светлая → тёплая по кругу. Здесь две: светлой у лендинга нет и не было</li>
+    <li><time>15.07 22:41</time>🩹 <b>Даты и сноски были нечитаемы.</b> <code>--faint</code> держал <b>3.29:1</b> к фону при норме 4.5:1 — а этим цветом набраны все даты и подписи. Поднят до 4.63:1. В продукте это починили раньше, лендинг отставал</li>
+    <li><time>15.07 21:03</time>✍️ <b>В подвале появилась подпись.</b> «Разработал Сашка Ислантьев прикинь??» — вырезанными буквами: каждой свой шрифт, кегль, наклон и цвет, часть на бумажных квадратиках. Наведи — задрожит</li>
+    <li><time>15.07 21:03</time><b>Кредит разработчика.</b> «Разработано в» и лого студии — как в подвале nordberg-market.ru</li>
+    <li><time>15.07 21:03</time>🩹 <b>Убрана лишняя линия над подвалом.</b> У <code>footer</code> стоял <code>border-top</code> во всю ширину экрана, а сам подвал сидит в колонке 1180px — линия ни к чему не привязывалась. Отбивку теперь держит только отступ</li>
+    <li><time>15.07 20:54</time>🩹 <b>Дымка больше не расчерчена квадратами.</b> Шум по краям экрана тайлится плитками 800×800, а область <code>&lt;filter&gt;</code> по умолчанию — 120% от неё, 960×960. <code>stitchTiles</code> сшивает шум по краю области, а не картинки, поэтому края плитки не сходились и каждые 800px шёл шов. Задали области ровно по плитке</li>
+    <li><time>15.07 20:47</time><b>Эта панель теперь стартует свёрнутой.</b> Разворачивается кнопкой «✦ Что изменилось» справа снизу</li>
+    <li><time>15.07 20:47</time><b>Плашка куки временно спрятана.</b> Не удалена: разметка, стили и кнопка «Принять» на месте. Вернуть — поставить <code>COOKIEBAR_ON=true</code> в скрипте внизу страницы</li>
+    <li><time>15.07 20:40</time>🩹 <b>Шапка панели больше не просвечивает.</b> Пункты списка — <code>position:relative</code>, шапка — <code>sticky</code> без <code>z-index</code>. Оба в одном слое, пункты позже в DOM — и рисовались поверх шапки. Подняли шапку в свой слой</li>
+    <li><time>15.07 16:40</time><b>Лендинг стал главной страницей продукта.</b> Он на «/», инструмент — на «/audit», разбор аудита — на «/audit/номер»</li>
+    <li><time>15.07 16:40</time><b>«Проложить курс» больше не притворяется.</b> Кнопка писала «Сканируем куки…», «Курс построен» и ничего не проверяла. Теперь она уводит в инструмент и передаёт ему ссылку — проверка стартует сама</li>
+    <li><time>15.07 16:40</time>🩹 <b>Пруф был ненаходимым.</b> В отчёте стояло <code>&lt;script async="" src=…&gt;</code>, а на сайте написано <code>async</code> — эту строку нельзя было найти поиском. Теперь фрагмент вырезается из исходника дословно, с номером строки</li>
+    <li><time>15.07 16:40</time>🩹 <b>«Эксклюзивный» больше не англицизм.</b> Это русское слово в словарях. Кириллицу не помечаем вовсе: решать, освоено слово или нет, можно только по утверждённым словарям, а их у нас нет. Ищем латиницу — SALE, PRICE, NEW</li>
+    <li><time>15.07 16:40</time>🩹 <b>Плашка куки проверяется сама.</b> Если она есть в разметке — разбираем состав: кнопка согласия, ссылка на Политику, ссылка на Политику куки, упоминание Метрики. «Вручную» остаётся только когда плашку рисует скрипт</li>
+    <li><time>15.07 16:40</time>🩹 <b>Заголовки не утверждают того, чего мы не знаем.</b> Было «Уведомление в РКН подано» рядом с жёлтым «требует ручной проверки». Стало «Уведомление в РКН» — факт сообщает вердикт. Так же с «Передача данных за границу»</li>
+    <li><time>15.07 16:40</time><b>Каждый вывод ведёт на документ.</b> Написали «Политика опубликована» — вот ссылка. Написали «в Политике рассылка не описана» — вот та Политика, которую мы прочитали</li>
+    <li><time>15.07 16:40</time>⚠️ <b>Демо-записи помечены.</b> example-shop.ru и остальные — вымышленные сайты с придуманными пруфами. Раньше они выглядели как настоящий результат</li>
   </ul>  <div class="warn">⚠ Это временная панель для приёмки. Перед публикацией удалить — я напомню.</div>
 </div>
 
@@ -858,7 +1217,22 @@ b.addEventListener('click',go);
 i.addEventListener('keydown',e=>{if(e.key==='Enter')go();});})();
 (function(){const bar=document.getElementById('progress');addEventListener('scroll',()=>{const h=document.documentElement;bar.style.width=(h.scrollTop/(h.scrollHeight-h.clientHeight)*100)+'%';},{passive:true});})();
 /* page cookie bar */
-(function(){const bar=document.getElementById('cookiebar');if(!bar)return;setTimeout(()=>bar.classList.add('show'),1400);
+/* Тумблер темы: холодная ↔ тёплая. Значение пишем в тот же ключ, что читает
+   продукт, — выбор переезжает на /audit и обратно. */
+(function(){const b=document.getElementById('themeTgl');if(!b)return;
+const say=t=>t==='warm'?'Вернуть холодную тему':'Тёплая тема — солнце подходит';
+const put=t=>{document.documentElement.dataset.theme=t;b.setAttribute('aria-label',say(t));b.title=say(t);};
+put(document.documentElement.dataset.theme==='warm'?'warm':'dark');
+b.addEventListener('click',()=>{
+  const t=document.documentElement.dataset.theme==='warm'?'dark':'warm';
+  put(t);
+  try{localStorage.setItem('theme',t)}catch(e){/* приватный режим — выбор не переживёт перезагрузку */}
+});})();
+/* Плашка куки: включить = поставить true. Разметка, стили и кнопка «Принять» на месте. */
+const COOKIEBAR_ON=false;
+(function(){const bar=document.getElementById('cookiebar');if(!bar)return;
+if(!COOKIEBAR_ON){bar.hidden=true;return;}
+setTimeout(()=>bar.classList.add('show'),1400);
 function hide(){bar.classList.remove('show');}document.getElementById('ckOk').addEventListener('click',hide);})();
 /* попапы чек-листа: на десктопе — наведение, на тач-устройствах — тап. Без залипаний. */
 (function(){

@@ -17,7 +17,7 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
     data = await getAudit(auditId);
   } catch {
     return (
-      <div className="frost px-5 py-8 text-sm text-muted">
+      <div className="frost px-5 py-8 text-body text-muted">
         <b className="text-gold">База недоступна.</b> PostgreSQL живёт на VPS — локально аудиты не
         читаются. <Link href="/" className="text-ice underline">На главную</Link>
       </div>
@@ -34,7 +34,7 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between gap-4">
-        <Link href="/" className="text-[13px] text-faint transition-colors hover:text-ice">
+        <Link href="/" className="text-body text-muted transition-colors hover:text-ice">
           ← Все проверки
         </Link>
         <DeleteAudit id={audit.id} />
@@ -52,7 +52,7 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
             >
               {hostOf(audit.final_url)}
             </a>
-            <p className="mt-1.5 text-[13px] text-faint">
+            <p className="mt-2 text-caption text-faint">
               {new Date(audit.created_at).toLocaleString('ru-RU')}
               {' · '}
               {audit.cms ? `CMS: ${audit.cms}` : 'CMS не определена'}
@@ -63,7 +63,7 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
           {audit.reachable && (
             <a
               href={`/api/audits/${audit.id}/docx`}
-              className="shrink-0 rounded-xl bg-ice px-5 py-2.5 text-[14px] font-bold text-void transition-opacity hover:opacity-90"
+              className="shrink-0 rounded-xl bg-ice px-5 py-3 text-lead font-bold text-void transition-opacity hover:opacity-90"
             >
               Скачать аудит в Word
             </a>
@@ -71,7 +71,7 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
         </div>
 
         {!audit.reachable ? (
-          <p className="mt-5 rounded-xl border border-gold/25 bg-gold/5 px-4 py-3 text-[13px] text-gold">
+          <p className="mt-5 rounded-xl border border-gold/40 bg-gold/5 px-4 py-3 text-body text-gold">
             {audit.error ?? 'Сайт не открылся.'}
           </p>
         ) : (
@@ -84,7 +84,7 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
         )}
 
         {audit.cms && audit.cms !== 'bitrix' && (
-          <p className="mt-4 text-[13px] text-muted">
+          <p className="mt-4 text-body text-muted">
             Сайт работает не на 1С-Битрикс — определили <b className="text-ink">{audit.cms}</b>.
           </p>
         )}
@@ -103,8 +103,8 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
           {violations.length > 0 && (
             <section className="space-y-4">
               <div className="flex items-baseline justify-between gap-4">
-                <h2 className="text-xl font-bold tracking-tight">Подтверждённые нарушения</h2>
-                <span className="text-xs text-faint">подтверждены всеми факторами</span>
+                <h2 className="text-2xl font-bold tracking-tight">Подтверждённые нарушения</h2>
+                <span className="text-caption text-faint">подтверждены всеми факторами</span>
               </div>
               <div className="grid gap-3">
                 {violations.map((f) => (
@@ -118,8 +118,8 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
           {manual.length > 0 && (
             <section className="space-y-4">
               <div>
-                <h2 className="text-xl font-bold tracking-tight">Требует ручной проверки</h2>
-                <p className="mt-1 text-[13px] text-muted">
+                <h2 className="text-2xl font-bold tracking-tight">Требует ручной проверки</h2>
+                <p className="mt-1.5 max-w-2xl text-body text-muted">
                   Подтвердить или опровергнуть автоматически нельзя. Не заявляем как нарушение и не
                   выбрасываем — проверяем руками.
                 </p>
@@ -135,7 +135,7 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
           {/* Соответствует */}
           {ok.length > 0 && (
             <section className="space-y-4">
-              <h2 className="text-xl font-bold tracking-tight">Соответствует</h2>
+              <h2 className="text-2xl font-bold tracking-tight">Соответствует</h2>
               <div className="grid gap-3">
                 {ok.map((f) => (
                   <FindingCard key={f.id} finding={f} />
@@ -148,23 +148,23 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
           {anglicisms.length > 0 && (
             <section className="space-y-4">
               <div className="flex items-baseline justify-between gap-4">
-                <h2 className="text-xl font-bold tracking-tight">Иностранные слова</h2>
+                <h2 className="text-2xl font-bold tracking-tight">Иностранные слова</h2>
                 <a
                   href={NORMS.fz168.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-xs text-ice/70 underline decoration-ice/25 underline-offset-2 hover:text-ice"
+                  className="text-caption text-ice underline decoration-ice/40 underline-offset-2 hover:text-ice-strong"
                 >
                   {NORMS.fz168.label} · с 01.03.2026
                 </a>
               </div>
               <div className="frost divide-y divide-line overflow-hidden">
                 {anglicisms.map((a) => (
-                  <div key={a.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-5 py-3">
-                    <b className="text-[14px] font-semibold text-danger">«{a.word}»</b>
+                  <div key={a.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-5 py-3.5">
+                    <b className="text-lead font-semibold text-danger">«{a.word}»</b>
                     <span className="text-faint">→</span>
-                    <b className="text-[14px] font-semibold text-safe">«{a.suggestion}»</b>
-                    <span className="w-full truncate text-[12px] text-faint">{a.context}</span>
+                    <b className="text-lead font-semibold text-safe">«{a.suggestion}»</b>
+                    <span className="w-full truncate text-caption text-faint">{a.context}</span>
                   </div>
                 ))}
               </div>
@@ -192,7 +192,7 @@ function Metric({
   return (
     <div>
       <div className={`text-3xl font-extrabold tabular-nums ${color}`}>{value}</div>
-      <div className="mt-0.5 text-[12px] text-faint">{label}</div>
+      <div className="mt-1 text-caption text-faint">{label}</div>
     </div>
   );
 }

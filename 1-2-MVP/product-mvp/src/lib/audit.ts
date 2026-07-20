@@ -12,6 +12,13 @@ export async function auditSite(url: string): Promise<AuditResult> {
     return { snapshot: crawled, findings: [], anglicisms: [] };
   }
 
+  // Сайт закрыт антибот-защитой — содержимое недостоверно. Проверки не
+  // запускаем и письмо не генерируем: иначе выдали бы нарушения по коду
+  // заглушки, которого у клиента нет. То же поведение, что и для недоступного.
+  if (crawled.blockedByAntibot) {
+    return { snapshot: crawled, findings: [], anglicisms: [] };
+  }
+
   // Краул знает про страницы, geo — про сеть. Склеиваем здесь, чтобы ни один
   // из них не знал про другого.
   const snapshot = { ...crawled, hosting: await resolveHosting(crawled.finalUrl) };

@@ -3,7 +3,9 @@ import { auditSite } from '@/lib/audit';
 import { listAudits, saveAudit } from '@/lib/db';
 
 export const runtime = 'nodejs';
-// Аудит скачивает до 12 страниц чужого сайта — это долго и всегда «живое».
+// Аудит открывает до 18 страниц чужого сайта настоящим браузером (Playwright):
+// это долго и всегда «живое». Часть сайтов под защитой — тогда снапшот
+// помечается blockedByAntibot и проверки не запускаются.
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
@@ -32,7 +34,12 @@ export async function POST(req: Request) {
   // Сайт не открылся — письмо не генерируем (PRD §7), но запись сохраняем.
   try {
     const id = await saveAudit(result);
-    return NextResponse.json({ id, reachable: result.snapshot.reachable, error: result.snapshot.error ?? null });
+    return NextResponse.json({
+      id,
+      reachable: result.snapshot.reachable,
+      blockedByAntibot: result.snapshot.blockedByAntibot,
+      error: result.snapshot.error ?? null,
+    });
   } catch (e) {
     return NextResponse.json(
       {

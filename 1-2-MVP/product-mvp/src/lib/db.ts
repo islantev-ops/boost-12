@@ -49,6 +49,7 @@ export type AuditRow = {
   reachable: boolean;
   error: string | null;
   client_rendered: boolean;
+  blocked_by_antibot: boolean;
   demo: boolean;
   created_at: string;
 };
@@ -134,8 +135,8 @@ export async function saveAudit(result: AuditResult): Promise<number> {
 
     const { snapshot, findings, anglicisms } = result;
     const audit = await client.query<{ id: number }>(
-      `INSERT INTO audits (input_url, final_url, cms, reachable, error, client_rendered)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+      `INSERT INTO audits (input_url, final_url, cms, reachable, error, client_rendered, blocked_by_antibot)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
       [
         snapshot.inputUrl,
         snapshot.finalUrl,
@@ -143,6 +144,7 @@ export async function saveAudit(result: AuditResult): Promise<number> {
         snapshot.reachable,
         snapshot.error ?? null,
         snapshot.clientRendered,
+        snapshot.blockedByAntibot,
       ],
     );
     const auditId = audit.rows[0].id;

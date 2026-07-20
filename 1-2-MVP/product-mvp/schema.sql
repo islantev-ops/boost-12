@@ -14,6 +14,10 @@ CREATE TABLE audits (
   reachable       BOOLEAN     NOT NULL DEFAULT true,
   error           TEXT,
   client_rendered BOOLEAN     NOT NULL DEFAULT false,
+  -- Сайт закрыт антибот-защитой: даже реальный браузер не прошёл челлендж.
+  -- Проверки не запускались, отчёт пустой. Отдельная колонка нужна, чтобы UI
+  -- отличал «закрыт защитой» от «чистый сайт» без разбора текста error.
+  blocked_by_antibot BOOLEAN     NOT NULL DEFAULT false,
   -- Демо-запись: сайт вымышленный, пруфы придуманы. Без пометки такая строка
   -- выглядит как настоящий результат, и её идут перепроверять на живом сайте.
   demo            BOOLEAN     NOT NULL DEFAULT false,

@@ -31,13 +31,20 @@ export class BrowserSession {
     // проверено, застревает на «Проверка пользователя…» >26с. На сервере без
     // экрана процесс запускается под xvfb (см. Task 6).
     const browser = await chromium.launch({ headless: false });
-    const context = await browser.newContext({ userAgent: UA, locale: 'ru-RU' });
-    return new BrowserSession(browser, context);
+    try {
+      const context = await browser.newContext({ userAgent: UA, locale: 'ru-RU' });
+      return new BrowserSession(browser, context);
+    } catch (e) {
+      // newContext упал после успешного launch — иначе Chromium повис бы процессом.
+      await browser.close().catch(() => {});
+      throw e;
+    }
   }
 
   async load(url: string): Promise<LoadResult> {
-    const page = await this.context.newPage();
+    let page;
     try {
+      page = await this.context.newPage();
       const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT_MS });
       const status = resp?.status() ?? 0;
 
@@ -65,7 +72,7 @@ export class BrowserSession {
     } catch {
       return null;
     } finally {
-      await page.close().catch(() => {});
+      if (page) await page.close().catch(() => {});
     }
   }
 

@@ -1,10 +1,7 @@
 import * as cheerio from 'cheerio';
 import type { CrawledPage, SiteSnapshot } from './types';
+import { BrowserSession, type LoadResult } from './browser';
 
-const UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36';
-
-const TIMEOUT_MS = 15_000;
 const MAX_PAGES = 18;
 
 /**
@@ -81,26 +78,6 @@ function normalizeUrl(raw: string): string {
   const trimmed = raw.trim();
   if (!/^https?:\/\//i.test(trimmed)) return `https://${trimmed}`;
   return trimmed;
-}
-
-async function fetchPage(url: string): Promise<CrawledPage | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml' },
-      redirect: 'follow',
-      signal: controller.signal,
-    });
-    const ctype = res.headers.get('content-type') ?? '';
-    if (!ctype.includes('html')) return null;
-    const html = await res.text();
-    return { url: res.url || url, status: res.status, html, text: htmlToText(html) };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 export function htmlToText(html: string): string {
@@ -246,72 +223,99 @@ function collectLinks(html: string, base: string): string[] {
 
 export async function crawlSite(inputUrl: string): Promise<SiteSnapshot> {
   const start = normalizeUrl(inputUrl);
+  const session = await BrowserSession.open();
+  try {
+    let home = await session.load(start);
+    // https не ответил — пробуем http, но фиксируем это честно
+    if (!home && start.startsWith('https://')) {
+      home = await session.load(start.replace(/^https:/, 'http:'));
+    }
 
-  let home = await fetchPage(start);
-  // https не ответил — пробуем http, но фиксируем это честно
-  if (!home && start.startsWith('https://')) {
-    home = await fetchPage(start.replace(/^https:/, 'http:'));
-  }
+    if (!home) {
+      return {
+        inputUrl: start,
+        finalUrl: start,
+        reachable: false,
+        error: 'Сайт не открывается: нет ответа или отдаётся не HTML.',
+        cms: null,
+        clientRendered: false,
+        footerVisible: false,
+        blockedByAntibot: false,
+        hosting: null,
+        pages: [],
+      };
+    }
 
-  if (!home) {
+    // Даже реальный браузер не прошёл защиту — автопроверка невозможна.
+    // Не запускаем проверки: в коде заглушки чужие счётчики, они не про клиента.
+    if (home.blocked) {
+      return {
+        inputUrl: start,
+        finalUrl: home.url,
+        reachable: true,
+        error: 'Сайт закрыт антибот-защитой: автоматическая проверка невозможна, нужна ручная проверка в браузере.',
+        cms: null,
+        clientRendered: false,
+        footerVisible: false,
+        blockedByAntibot: true,
+        hosting: null,
+        pages: [],
+      };
+    }
+
+    const pages: CrawledPage[] = [{ url: home.url, status: home.status, html: home.html, text: home.text }];
+    const visited = new Set([home.url]);
+
+    for (const link of collectLinks(home.html, home.url)) {
+      if (pages.length >= MAX_PAGES) break;
+      if (visited.has(link)) continue;
+      visited.add(link);
+      const page = await session.load(link);
+      // Заглушку антибота в снапшот не берём — она не про клиента.
+      if (page && !page.blocked) {
+        pages.push({ url: page.url, status: page.status, html: page.html, text: page.text });
+      }
+    }
+
+    // Контрольный запрос по заведомо несуществующему адресу — фингерпринт soft-404.
+    const canary = await session.load(new URL(`/nnq-${'probe'}-404-check/`, home.url).toString());
+    const canarySignature =
+      canary && !canary.blocked && canary.status === 200
+        ? signature({ url: canary.url, status: canary.status, html: canary.html, text: canary.text })
+        : null;
+
+    // Документы, опубликованные, но не прилинкованные с главной.
+    for (const path of PROBE_PATHS) {
+      if (pages.length >= MAX_PAGES) break;
+      let probe: string;
+      try {
+        probe = new URL(path, home.url).toString();
+      } catch {
+        continue;
+      }
+      if (visited.has(probe)) continue;
+      visited.add(probe);
+      const page = await session.load(probe);
+      if (!page || page.blocked || page.status !== 200) continue;
+      const cp: CrawledPage = { url: page.url, status: page.status, html: page.html, text: page.text };
+      if (looksLikeNotFound(cp)) continue;
+      if (canarySignature && signature(cp) === canarySignature) continue;
+      if (cp.text.length < 200) continue;
+      pages.push(cp);
+    }
+
     return {
       inputUrl: start,
-      finalUrl: start,
-      reachable: false,
-      error: 'Сайт не открывается: нет ответа или отдаётся не HTML.',
-      cms: null,
-      clientRendered: false,
-      footerVisible: false,
+      finalUrl: home.url,
+      reachable: true,
+      cms: detectCms(home.html),
+      clientRendered: detectClientRendered(home.html),
+      footerVisible: detectFooter(home.html, home.url),
+      blockedByAntibot: false,
       hosting: null,
-      pages: [],
+      pages,
     };
+  } finally {
+    await session.close();
   }
-
-  const pages: CrawledPage[] = [home];
-  const visited = new Set([home.url]);
-
-  for (const link of collectLinks(home.html, home.url)) {
-    if (pages.length >= MAX_PAGES) break;
-    if (visited.has(link)) continue;
-    visited.add(link);
-    const page = await fetchPage(link);
-    if (page) pages.push(page);
-  }
-
-  // Контрольный запрос по заведомо несуществующему адресу. Многие сайты
-  // отдают на него код 200 и обычную оболочку. Зная, как выглядит их «ничего
-  // не найдено», мы не примем такую заглушку за опубликованный документ.
-  const canary = await fetchPage(new URL(`/nnq-${'probe'}-404-check/`, home.url).toString());
-  const canarySignature = canary && canary.status === 200 ? signature(canary) : null;
-
-  // Документы, опубликованные, но не прилинкованные с главной.
-  for (const path of PROBE_PATHS) {
-    if (pages.length >= MAX_PAGES) break;
-    let probe: string;
-    try {
-      probe = new URL(path, home.url).toString();
-    } catch {
-      continue;
-    }
-    if (visited.has(probe)) continue;
-    visited.add(probe);
-    const page = await fetchPage(probe);
-    if (!page || page.status !== 200) continue;
-    if (looksLikeNotFound(page)) continue;
-    if (canarySignature && signature(page) === canarySignature) continue;
-    // Документ без текста — не документ.
-    if (page.text.length < 200) continue;
-    pages.push(page);
-  }
-
-  return {
-    inputUrl: start,
-    finalUrl: home.url,
-    reachable: true,
-    cms: detectCms(home.html),
-    clientRendered: detectClientRendered(home.html),
-    footerVisible: detectFooter(home.html, home.url),
-    hosting: null,
-    pages,
-  };
 }

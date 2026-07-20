@@ -1,6 +1,6 @@
 import * as cheerio from 'cheerio';
 import type { CrawledPage, SiteSnapshot } from './types';
-import { BrowserSession, type LoadResult } from './browser';
+import { BrowserSession } from './browser';
 
 const MAX_PAGES = 18;
 

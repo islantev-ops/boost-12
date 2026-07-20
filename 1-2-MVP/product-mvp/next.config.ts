@@ -1,6 +1,9 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  // playwright резолвит путь к бинарю Chromium в рантайме — его нельзя
+  // бандлить, иначе chromium.launch() падает в собранном next start.
+  serverExternalPackages: ['playwright'],
   async rewrites() {
     return {
       /**

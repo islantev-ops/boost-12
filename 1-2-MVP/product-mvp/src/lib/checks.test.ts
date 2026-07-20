@@ -13,6 +13,7 @@ function snapshot(hosting: HostingFact | null, html = CLEAN_HTML): SiteSnapshot 
     cms: 'bitrix',
     clientRendered: false,
     footerVisible: true,
+    blockedByAntibot: false,
     hosting,
     pages: [{ url: 'https://example.ru/', status: 200, html, text: 'Магазин' }],
   };

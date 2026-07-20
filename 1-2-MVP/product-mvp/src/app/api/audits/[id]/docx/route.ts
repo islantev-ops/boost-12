@@ -14,6 +14,13 @@ export async function GET(_req: Request, { params }: Ctx) {
     const data = await getAudit(id);
     if (!data) return new Response('Аудит не найден.', { status: 404 });
 
+    if (data.audit.blocked_by_antibot) {
+      return new Response(
+        'Сайт закрыт антибот-защитой: автоматическая проверка не выполнялась, отчёт не формируется.',
+        { status: 409 },
+      );
+    }
+
     const buffer = await buildAuditDocx(data.audit, data.findings, data.anglicisms);
     const host = safeHost(data.audit.final_url);
 

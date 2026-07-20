@@ -185,6 +185,8 @@ function AuditCard({ audit }: { audit: Row }) {
 
       {!audit.reachable ? (
         <span className="text-sm text-gold">сайт не открылся</span>
+      ) : audit.blocked_by_antibot ? (
+        <span className="text-sm text-gold">закрыт защитой</span>
       ) : (
         <div className="flex items-center gap-4 text-sm">
           <Stat value={audit.violations} label="нарушений" tone="danger" />

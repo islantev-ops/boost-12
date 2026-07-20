@@ -27,6 +27,9 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
   if (!data) notFound();
 
   const { audit, findings, anglicisms } = data;
+  // Заблокированный антиботом сайт: reachable=true, но содержимого нет.
+  // Показываем как честный статус, а не как чистый проход.
+  const noReport = !audit.reachable || audit.blocked_by_antibot;
   const violations = findings.filter((f) => f.verdict === 'violation').sort((a, b) => b.severity - a.severity);
   const manual = findings.filter((f) => f.verdict === 'manual');
   const ok = findings.filter((f) => f.verdict === 'ok');
@@ -60,7 +63,7 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
             </p>
           </div>
 
-          {audit.reachable && (
+          {!noReport && (
             <a
               href={`/api/audits/${audit.id}/docx`}
               className="shrink-0 rounded-xl bg-ice px-5 py-2.5 text-[14px] font-bold text-void transition-opacity hover:opacity-90"
@@ -70,9 +73,12 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
           )}
         </div>
 
-        {!audit.reachable ? (
+        {noReport ? (
           <p className="mt-5 rounded-xl border border-gold/25 bg-gold/5 px-4 py-3 text-[13px] text-gold">
-            {audit.error ?? 'Сайт не открылся.'}
+            {audit.error ??
+              (audit.blocked_by_antibot
+                ? 'Сайт закрыт антибот-защитой: автоматическая проверка невозможна, нужна ручная проверка в браузере.'
+                : 'Сайт не открылся.')}
           </p>
         ) : (
           <div className="mt-6 flex flex-wrap gap-x-8 gap-y-3">
@@ -90,7 +96,7 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
         )}
       </section>
 
-      {audit.reachable && (
+      {!noReport && (
         <>
           {/*
             Письмо владельцу сайта скрыто на странице аудита — решение продукта от

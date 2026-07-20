@@ -77,25 +77,25 @@ export default function AuditForm({ initialUrl }: { initialUrl?: string }) {
           placeholder="example.ru"
           disabled={busy}
           aria-label="Ссылка на сайт"
-          className="min-w-0 flex-1 rounded-xl border border-line-2 bg-void-2/80 px-4 py-3 text-[15px] text-ink outline-none transition-colors placeholder:text-faint focus:border-ice/60 disabled:opacity-60"
+          className="min-w-0 flex-1 rounded-xl border border-field-line bg-field px-4 py-3.5 text-lead text-ink outline-none transition-colors placeholder:text-faint focus:border-ice disabled:opacity-60"
         />
         <button
           type="submit"
           disabled={busy || !url.trim()}
-          className="relative shrink-0 overflow-hidden rounded-xl bg-ice px-6 py-3 text-[15px] font-bold text-void transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+          className="relative shrink-0 overflow-hidden rounded-xl bg-ice px-6 py-3.5 text-lead font-bold text-void transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {busy ? 'Проверяем…' : 'Проверить сайт'}
         </button>
       </div>
 
       {busy && (
-        <div className="scanning relative overflow-hidden rounded-xl border border-line-2 bg-void-2/60 px-4 py-3">
-          <span className="pulse-ice text-[13px] text-ice">{STAGES[stage]}</span>
+        <div className="scanning relative overflow-hidden rounded-xl border border-field-line bg-field px-4 py-3.5">
+          <span className="pulse-ice text-body text-ice">{STAGES[stage]}</span>
         </div>
       )}
 
       {error && (
-        <p className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-[13px] text-danger">
+        <p className="rounded-xl border border-danger/40 bg-danger/5 px-4 py-3.5 text-body text-danger">
           {error}
         </p>
       )}

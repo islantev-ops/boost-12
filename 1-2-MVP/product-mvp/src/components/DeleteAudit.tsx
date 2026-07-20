@@ -32,7 +32,7 @@ export default function DeleteAudit({ id }: { id: number }) {
     return (
       <button
         onClick={() => setConfirming(true)}
-        className="text-[12px] text-faint transition-colors hover:text-danger"
+        className="text-caption text-muted transition-colors hover:text-danger"
       >
         Удалить аудит
       </button>
@@ -40,7 +40,7 @@ export default function DeleteAudit({ id }: { id: number }) {
   }
 
   return (
-    <span className="flex flex-wrap items-center gap-2 text-[12px]">
+    <span className="flex flex-wrap items-center gap-2 text-caption">
       <span className={error ? 'text-danger' : 'text-muted'}>
         {error ?? 'Удалить вместе с письмом?'}
       </span>

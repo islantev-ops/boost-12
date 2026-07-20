@@ -23,19 +23,40 @@ const MUTED = '5B6B8A';
 const DANGER = 'B3243A';
 const SAFE = '0F7A57';
 
+/*
+  Кегль в docx задаётся В ПОЛУПУНКТАХ: size: 24 — это 12pt. Раньше числа стояли
+  вразнобой (17, 18, 19, 21, 22, 23, 25), и половина отчёта уходила ниже 10pt:
+  фрагмент кода — 8.5pt, подписи — 9pt. Это документ, который распечатывают и
+  читают юристы, а не разглядывают на ретине.
+
+  Шкала повторяет экранную по смыслу, ступени различимы:
+    CAPTION — подписи, «что проверяли», нормы
+    BODY    — основной текст, вердикт
+    CODE    — фрагмент кода: моноширинный, читают посимвольно
+    TITLE   — заголовок находки
+*/
+const SIZE = {
+  caption: 21, // 10.5pt — было 18-19 (9-9.5pt)
+  body: 24, // 12pt   — было 22 (11pt)
+  code: 20, // 10pt   — было 17 (8.5pt)
+  title: 26, // 13pt   — было 25 (12.5pt)
+  doc: 36, // 18pt   — заголовок документа
+} as const;
+
 function h(text: string, level: (typeof HeadingLevel)[keyof typeof HeadingLevel]) {
-  return new Paragraph({ text, heading: level, spacing: { before: 260, after: 130 } });
+  return new Paragraph({ text, heading: level, spacing: { before: 300, after: 150 } });
 }
 
 function p(text: string, opts: { color?: string; bold?: boolean; size?: number; after?: number } = {}) {
   return new Paragraph({
-    spacing: { after: opts.after ?? 90 },
+    // Межстрочный интервал 1.15 — плотный текст в 12pt читать тяжело.
+    spacing: { after: opts.after ?? 110, line: 276 },
     children: [
       new TextRun({
         text,
         color: opts.color ?? INK,
         bold: opts.bold,
-        size: opts.size ?? 22,
+        size: opts.size ?? SIZE.body,
         font: 'Calibri',
       }),
     ],
@@ -51,16 +72,16 @@ function codeBlock(snippet: string, url: string, line?: number) {
         new TextRun({
           text: `${url}${line ? `, строка ${line} в исходном коде` : ''} — откройте страницу, нажмите Ctrl+U и найдите этот текст поиском:`,
           color: MUTED,
-          size: 18,
+          size: SIZE.caption,
           italics: true,
           font: 'Calibri',
         }),
       ],
     }),
     new Paragraph({
-      spacing: { after: 120 },
+      spacing: { after: 140, line: 276 },
       shading: { type: ShadingType.CLEAR, fill: 'F2F5FA' },
-      children: [new TextRun({ text: snippet, font: 'Consolas', size: 17, color: '243B5E' })],
+      children: [new TextRun({ text: snippet, font: 'Consolas', size: SIZE.code, color: '243B5E' })],
     }),
   ];
 }
@@ -68,14 +89,21 @@ function codeBlock(snippet: string, url: string, line?: number) {
 function normLines(norms: string[]) {
   return norms.map((key) => {
     const norm = NORMS[key as keyof typeof NORMS];
-    if (!norm) return p(`Норма: ${key}`, { color: MUTED, size: 19 });
+    if (!norm) return p(`Норма: ${key}`, { color: MUTED, size: SIZE.caption });
     const fine = 'fine' in norm && norm.fine ? ` Штраф юрлицу: ${norm.fine}.` : '';
     return new Paragraph({
-      spacing: { after: 70 },
+      spacing: { after: 90, line: 276 },
       children: [
-        new TextRun({ text: `${norm.label} — ${norm.gist}.${fine} `, size: 19, color: MUTED, font: 'Calibri' }),
+        new TextRun({
+          text: `${norm.label} — ${norm.gist}.${fine} `,
+          size: SIZE.caption,
+          color: MUTED,
+          font: 'Calibri',
+        }),
         new ExternalHyperlink({
-          children: [new TextRun({ text: 'Читать первоисточник', style: 'Hyperlink', size: 19, font: 'Calibri' })],
+          children: [
+            new TextRun({ text: 'Читать первоисточник', style: 'Hyperlink', size: SIZE.caption, font: 'Calibri' }),
+          ],
           link: norm.url,
         }),
       ],
@@ -94,7 +122,7 @@ function findingBlock(f: FindingRow, index: number) {
         new TextRun({
           text: `${index}. ${f.title}`,
           bold: true,
-          size: 25,
+          size: SIZE.title,
           color: isViolation ? DANGER : INK,
           font: 'Calibri',
         }),
@@ -102,11 +130,11 @@ function findingBlock(f: FindingRow, index: number) {
     }),
   );
 
-  out.push(p(f.what, { color: MUTED, size: 19 }));
+  out.push(p(f.what, { color: MUTED, size: SIZE.caption }));
   out.push(p(f.summary));
 
   if (f.edited) {
-    out.push(p('Формулировка отредактирована вручную перед отправкой.', { color: MUTED, size: 18 }));
+    out.push(p('Формулировка отредактирована вручную перед отправкой.', { color: MUTED, size: SIZE.caption }));
   }
 
   // Документ, который мы прочитали: вывод должен вести на источник.
@@ -115,9 +143,9 @@ function findingBlock(f: FindingRow, index: number) {
       new Paragraph({
         spacing: { after: 90 },
         children: [
-          new TextRun({ text: `${f.doc.label}: `, size: 20, color: MUTED, font: 'Calibri' }),
+          new TextRun({ text: `${f.doc.label}: `, size: SIZE.caption, color: MUTED, font: 'Calibri' }),
           new ExternalHyperlink({
-            children: [new TextRun({ text: f.doc.url, style: 'Hyperlink', size: 20, font: 'Calibri' })],
+            children: [new TextRun({ text: f.doc.url, style: 'Hyperlink', size: SIZE.caption, font: 'Calibri' })],
             link: f.doc.url,
           }),
         ],
@@ -149,21 +177,29 @@ export async function buildAuditDocx(
       alignment: AlignmentType.LEFT,
       spacing: { after: 60 },
       children: [
-        new TextRun({ text: 'Аудит сайта на соответствие требованиям РКН', bold: true, size: 34, color: INK, font: 'Calibri' }),
+        new TextRun({
+          text: 'Аудит сайта на соответствие требованиям РКН',
+          bold: true,
+          size: SIZE.doc,
+          color: INK,
+          font: 'Calibri',
+        }),
       ],
     }),
   );
-  children.push(p(audit.final_url, { color: MUTED, size: 22 }));
+  children.push(p(audit.final_url, { color: MUTED, size: SIZE.body }));
   children.push(
     p(
       `Проверено: ${new Date(audit.created_at).toLocaleString('ru-RU')}. ` +
         `CMS: ${audit.cms ?? 'не определена'}.`,
-      { color: MUTED, size: 19, after: 200 },
+      { color: MUTED, size: SIZE.caption, after: 200 },
     ),
   );
 
   if (audit.cms && audit.cms !== 'bitrix') {
-    children.push(p(`Сайт работает не на 1С-Битрикс, определённая CMS — ${audit.cms}.`, { color: MUTED, size: 19 }));
+    children.push(
+      p(`Сайт работает не на 1С-Битрикс, определённая CMS — ${audit.cms}.`, { color: MUTED, size: SIZE.caption }),
+    );
   }
 
   // Итог
@@ -185,7 +221,7 @@ export async function buildAuditDocx(
     children.push(
       p(
         'Каждый пункт ниже подтверждён фрагментом кода вашего сайта. Фрагмент можно перепроверить: откройте страницу и посмотрите исходный код.',
-        { color: MUTED, size: 19, after: 40 },
+        { color: MUTED, size: SIZE.caption, after: 60 },
       ),
     );
     violations
@@ -199,20 +235,20 @@ export async function buildAuditDocx(
     children.push(
       p(
         'Эти пункты нельзя подтвердить или опровергнуть автоматически. Мы не заявляем их как нарушения и не отбрасываем — их нужно проверить руками.',
-        { color: MUTED, size: 19, after: 40 },
+        { color: MUTED, size: SIZE.caption, after: 60 },
       ),
     );
     manual.forEach((f, i) => {
       children.push(
         new Paragraph({
-          spacing: { before: 160, after: 50 },
+          spacing: { before: 200, after: 60 },
           children: [
-            new TextRun({ text: `${i + 1}. ${f.title}`, bold: true, size: 23, color: INK, font: 'Calibri' }),
-            new TextRun({ text: `  [${METHOD_LABEL[f.method]}]`, size: 18, color: MUTED, font: 'Calibri' }),
+            new TextRun({ text: `${i + 1}. ${f.title}`, bold: true, size: SIZE.title, color: INK, font: 'Calibri' }),
+            new TextRun({ text: `  [${METHOD_LABEL[f.method]}]`, size: SIZE.caption, color: MUTED, font: 'Calibri' }),
           ],
         }),
       );
-      children.push(p(f.summary, { size: 21 }));
+      children.push(p(f.summary));
       children.push(...normLines(f.norms ?? []));
     });
   }
@@ -220,7 +256,7 @@ export async function buildAuditDocx(
   // Соответствует
   if (ok.length) {
     children.push(h('Соответствует требованиям', HeadingLevel.HEADING_1));
-    ok.forEach((f) => children.push(p(`• ${f.title} — ${f.summary}`, { size: 21 })));
+    ok.forEach((f) => children.push(p(`• ${f.title} — ${f.summary}`)));
   }
 
   // Англицизмы
@@ -229,17 +265,17 @@ export async function buildAuditDocx(
     children.push(
       p(
         'Бонусная проверка. Закон запрещает иностранные слова при наличии общеупотребительного русского аналога. Требования к сайтам вступают в силу с 01.03.2026.',
-        { color: MUTED, size: 19 },
+        { color: MUTED, size: SIZE.caption },
       ),
     );
     anglicisms.slice(0, 60).forEach((a) => {
       children.push(
         new Paragraph({
-          spacing: { after: 60 },
+          spacing: { after: 80, line: 276 },
           children: [
-            new TextRun({ text: `«${a.word}»`, bold: true, size: 21, color: INK, font: 'Calibri' }),
-            new TextRun({ text: ` → «${a.suggestion}»  `, size: 21, color: SAFE, font: 'Calibri' }),
-            new TextRun({ text: a.context, size: 18, color: MUTED, italics: true, font: 'Calibri' }),
+            new TextRun({ text: `«${a.word}»`, bold: true, size: SIZE.body, color: INK, font: 'Calibri' }),
+            new TextRun({ text: ` → «${a.suggestion}»  `, size: SIZE.body, color: SAFE, font: 'Calibri' }),
+            new TextRun({ text: a.context, size: SIZE.caption, color: MUTED, italics: true, font: 'Calibri' }),
           ],
         }),
       );
@@ -249,11 +285,11 @@ export async function buildAuditDocx(
 
   // Источники
   children.push(h('Источники', HeadingLevel.HEADING_1));
-  children.push(p(CONSULTANT_NOTE, { color: MUTED, size: 19 }));
+  children.push(p(CONSULTANT_NOTE, { color: MUTED, size: SIZE.caption }));
   children.push(
     p('Все нормы и суммы штрафов приведены по КонсультантПлюс. Ссылки в отчёте ведут на конкретную часть статьи.', {
       color: MUTED,
-      size: 19,
+      size: SIZE.caption,
     }),
   );
 

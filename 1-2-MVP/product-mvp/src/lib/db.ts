@@ -42,6 +42,9 @@ export function parseId(raw: string): number | null {
   return Number.isInteger(id) && id > 0 ? id : null;
 }
 
+/** Значения обязаны точно совпадать с CHECK (status IN (...)) в schema.sql. */
+export type AuditStatus = 'queued' | 'crawling' | 'checking' | 'done' | 'failed' | 'blocked';
+
 export type AuditRow = {
   id: number;
   input_url: string;
@@ -57,6 +60,8 @@ export type AuditRow = {
   pages_crawled: number;
   current_url: string | null;
   coverage: CrawlCoverage | null;
+  /** Отметка живости фонового обхода: обновляется на каждом вызове setAuditStatus. */
+  updated_at: string;
 };
 
 export type FindingRow = {
@@ -142,16 +147,22 @@ export async function createQueuedAudit(inputUrl: string): Promise<number> {
   return rows[0].id;
 }
 
+/**
+ * Обход дёргает эту функцию на каждой странице — поэтому заодно освежаем
+ * `updated_at`: это единственная отметка живости фонового аудита, по которой
+ * `failStaleAudits` отличает реально зависший процесс от ещё работающего.
+ */
 export async function setAuditStatus(
   id: number,
-  status: string,
+  status: AuditStatus,
   patch: { pagesCrawled?: number; currentUrl?: string | null; error?: string | null } = {},
 ): Promise<void> {
   await getPool().query(
     `UPDATE audits SET status = $2,
        pages_crawled = COALESCE($3, pages_crawled),
        current_url   = COALESCE($4, current_url),
-       error         = COALESCE($5, error)
+       error         = COALESCE($5, error),
+       updated_at    = NOW()
      WHERE id = $1`,
     [id, status, patch.pagesCrawled ?? null, patch.currentUrl ?? null, patch.error ?? null],
   );
@@ -168,12 +179,24 @@ export async function getAuditStatus(id: number) {
 /**
  * Перезапуск сервера посреди аудита оставил бы задачу висеть в «crawling»
  * навсегда. Помечаем такие честно — «прервано», а не делаем вид, что работа идёт.
+ *
+ * Статус сам по себе не отличает зависший процесс от работающего: при
+ * перезапуске pm2 внахлёст (старый процесс ещё доживает, новый уже стартовал)
+ * реально живой аудит тоже имеет один из этих статусов. Поэтому дополнительно
+ * проверяем отметку живости `updated_at` — обход обновляет её на каждой
+ * странице (пауза между страницами 500 мс плюс загрузка), то есть живой
+ * аудит освежает её минимум раз в несколько секунд. Порог в пять минут даёт
+ * большой запас и трогает только записи, по которым правда никто не отчитывался.
  */
+const STALE_AUDIT_THRESHOLD = '5 minutes';
+
 export async function failStaleAudits(): Promise<number> {
   const { rowCount } = await getPool().query(
     `UPDATE audits SET status = 'failed',
        error = COALESCE(error, 'Проверка прервана перезапуском сервера. Запустите её заново.')
-     WHERE status IN ('queued','crawling','checking')`,
+     WHERE status IN ('queued','crawling','checking')
+       AND updated_at < NOW() - $1::interval`,
+    [STALE_AUDIT_THRESHOLD],
   );
   return rowCount ?? 0;
 }
@@ -254,10 +277,17 @@ export async function saveAudit(result: AuditResult): Promise<number> {
  * Страницы сохраняем целиком: без них аудит невоспроизводим.
  */
 export async function finishAudit(id: number, result: AuditResult): Promise<void> {
+  const { snapshot, findings, anglicisms } = result;
+
+  // Отпечаток — синхронный разбор HTML через cheerio, до нескольких сотен мс
+  // на страницу (см. комментарий в fingerprint.ts). Считаем его ДО открытия
+  // транзакции: внутри BEGIN...COMMIT это держало бы соединение занятым и
+  // блокировало событийный цикл на весь цикл по 300 страницам.
+  const pagesWithHash = snapshot.pages.map((p) => ({ page: p, hash: templateFingerprint(p.html) }));
+
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
-    const { snapshot, findings, anglicisms } = result;
 
     await client.query(
       `UPDATE audits SET final_url = $2, cms = $3, reachable = $4, error = $5,
@@ -272,10 +302,10 @@ export async function finishAudit(id: number, result: AuditResult): Promise<void
       ],
     );
 
-    for (const p of snapshot.pages) {
+    for (const { page: p, hash } of pagesWithHash) {
       await client.query(
         'INSERT INTO pages (audit_id, url, status, html, text, template_hash) VALUES ($1,$2,$3,$4,$5,$6)',
-        [id, p.url, p.status, p.html, p.text, templateFingerprint(p.html)],
+        [id, p.url, p.status, p.html, p.text, hash],
       );
     }
 
@@ -306,10 +336,19 @@ export async function finishAudit(id: number, result: AuditResult): Promise<void
 
     // Копии страниц тяжёлые и нужны недолго. Удаляем только их и только у
     // старых аудитов — сами аудиты, находки и письма не трогаем НИКОГДА.
+    //
+    // `audit_id <> $1` исключает ТЕКУЩИЙ аудит явно, а не только через
+    // ранжирование в подзапросе. Обход идёт минуты, и пока этот аудит
+    // работал, через createQueuedAudit могло появиться 20+ новых записей с
+    // более высокими id. Тогда по «ORDER BY id DESC OFFSET 20» текущий аудит
+    // уже не входит в топ-20 — без явного исключения DELETE вычистил бы
+    // страницы, вставленные несколькими строками выше в этой же транзакции,
+    // и аудит завершился бы как 'done', но без своих страниц.
     await client.query(
-      `DELETE FROM pages WHERE audit_id IN (
+      `DELETE FROM pages WHERE audit_id <> $1 AND audit_id IN (
          SELECT id FROM audits ORDER BY id DESC OFFSET 20
        )`,
+      [id],
     );
 
     await client.query('COMMIT');

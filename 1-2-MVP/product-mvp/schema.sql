@@ -31,7 +31,12 @@ CREATE TABLE audits (
   -- Факты охвата: сколько сайта посмотрели. Нужны отчёту, чтобы не заявлять
   -- «документа нет» после неполного обхода.
   coverage        JSONB,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  -- Отметка живости фоновой задачи: обход обновляет её на каждой странице
+  -- (см. setAuditStatus). failStaleAudits по ней отличает реально зависший
+  -- процесс (перезапуск сервера) от ещё работающего, чтобы не помечать
+  -- 'failed' живой аудит при перезапуске pm2 внахлёст.
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Копии обойдённых страниц. Нужны, чтобы спорный вывод можно было поднять

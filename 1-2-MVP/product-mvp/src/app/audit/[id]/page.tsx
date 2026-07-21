@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import AuditProgress from '@/components/AuditProgress';
 import DeleteAudit from '@/components/DeleteAudit';
 import FindingCard from '@/components/FindingCard';
 import { getAudit, parseId } from '@/lib/db';
@@ -30,6 +31,7 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
   // Заблокированный антиботом сайт: reachable=true, но содержимого нет.
   // Показываем как честный статус, а не как чистый проход.
   const noReport = !audit.reachable || audit.blocked_by_antibot;
+  const running = ['queued', 'crawling', 'checking'].includes(audit.status);
   const violations = findings.filter((f) => f.verdict === 'violation').sort((a, b) => b.severity - a.severity);
   const manual = findings.filter((f) => f.verdict === 'manual');
   const ok = findings.filter((f) => f.verdict === 'ok');
@@ -63,7 +65,7 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
             </p>
           </div>
 
-          {!noReport && (
+          {!noReport && !running && (
             <a
               href={`/api/audits/${audit.id}/docx`}
               className="shrink-0 rounded-xl bg-ice px-5 py-3 text-lead font-bold text-void transition-opacity hover:opacity-90"
@@ -73,7 +75,9 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
           )}
         </div>
 
-        {noReport ? (
+        {running ? (
+          <AuditProgress id={audit.id} />
+        ) : noReport ? (
           <p className="mt-5 rounded-xl border border-gold/40 bg-gold/5 px-4 py-3 text-body text-gold">
             {audit.error ??
               (audit.blocked_by_antibot
@@ -94,9 +98,22 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
             Сайт работает не на 1С-Битрикс — определили <b className="text-ink">{audit.cms}</b>.
           </p>
         )}
+
+        {!running && !noReport && audit.coverage && (
+          <p className="mt-4 text-body text-muted">
+            Осмотрено страниц: <b className="text-ink">{audit.coverage.crawled}</b> из{' '}
+            {audit.coverage.discovered} найденных на сайте
+            {!audit.coverage.complete && (
+              <> — обход остановлен: {audit.coverage.stopReason === 'timeLimit' ? 'исчерпан лимит времени' : 'достигнут потолок страниц'}</>
+            )}
+            {audit.coverage.skippedByTemplate > 0 && (
+              <> · пропущено однотипных: {audit.coverage.skippedByTemplate}</>
+            )}
+          </p>
+        )}
       </section>
 
-      {!noReport && (
+      {!noReport && !running && (
         <>
           {/*
             Письмо владельцу сайта скрыто на странице аудита — решение продукта от

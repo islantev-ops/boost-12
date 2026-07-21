@@ -183,7 +183,9 @@ function AuditCard({ audit }: { audit: Row }) {
         <span className="text-caption text-faint">{date}</span>
       </div>
 
-      {!audit.reachable ? (
+      {['queued', 'crawling', 'checking'].includes(audit.status) ? (
+        <span className="text-body text-ice">идёт проверка…</span>
+      ) : !audit.reachable ? (
         <span className="text-body text-gold">сайт не открылся</span>
       ) : audit.blocked_by_antibot ? (
         <span className="text-body text-gold">закрыт защитой</span>

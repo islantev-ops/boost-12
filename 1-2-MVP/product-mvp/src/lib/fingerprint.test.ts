@@ -27,3 +27,36 @@ test('скрипты и стили на отпечаток не влияют (A)
 test('пустой HTML не роняет функцию (A, граница)', () => {
   assert.equal(typeof templateFingerprint(''), 'string');
 });
+
+/* ── Три случая, найденные ревью 2026-07-21. Ради них и переделан подход. ── */
+
+const cardWithBadge = `<html><body>
+  <div class="product card"><span class="discount-badge">Скидка</span>
+  <h1 class="product__title">Дрель</h1>
+  <span class="product__price">5000</span>
+  <button class="btn btn--buy">Купить</button></div></body></html>`;
+
+test('необязательный блок «Скидка» не рвёт совпадение однотипных карточек (A)', () => {
+  // Раньше один лишний элемент сдвигал позиционный список, карточки считались
+  // разными, и выборка однотипных не срабатывала вовсе.
+  assert.equal(templateFingerprint(cardWithBadge), templateFingerprint(card('Дрель', '5000')));
+});
+
+test('огромное меню не схлопывает разные страницы в один отпечаток (A)', () => {
+  // Раньше 450 пунктов меню занимали все 400 позиций, и главная не отличалась
+  // от карточки товара — мы пропускали страницы, которые надо было проверить.
+  const nav = `<nav>${'<li class="menu__item"><a class="menu__link">п</a></li>'.repeat(450)}</nav>`;
+  const home = `<html><body>${nav}<section class="hero"><h1 class="hero__title">Главная</h1></section></body></html>`;
+  const product = `<html><body>${nav}<div class="product card"><h1 class="product__title">Дрель</h1>
+    <span class="product__price">5000</span></div></body></html>`;
+  assert.notEqual(templateFingerprint(home), templateFingerprint(product));
+});
+
+test('огромная страница разбирается за разумное время (A, стоимость)', () => {
+  // Раньше ограничение в 400 элементов не ограничивало стоимость: разбор шёл
+  // по всему документу, и мегабайтная страница стоила больше секунды.
+  const huge = `<html><body>${'<div class="row"><span class="cell">x</span></div>'.repeat(50000)}</body></html>`;
+  const t0 = Date.now();
+  templateFingerprint(huge);
+  assert.ok(Date.now() - t0 < 500, `отпечаток огромной страницы занял ${Date.now() - t0}мс`);
+});

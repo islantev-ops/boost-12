@@ -523,7 +523,10 @@ function check3(s: SiteSnapshot): CheckResult {
   const link = findLink(
     s,
     ['politika-konfidencial', 'policy', 'privacy', 'konfidencial', 'personal-data', 'personaldata'],
-    /конфиденциальн|персональн\w*\s+данн|обработк\w*\s+персональн/,
+    // \w в JS кириллицу не берёт ([A-Za-z0-9_]) — после корня всегда кириллическое
+    // окончание («персональных», «обработка»), поэтому вместо \w* используем
+    // [а-яё]* (см. .superpowers/sdd/regex-cyrillic-sweep.md, находка №1).
+    /конфиденциальн|персональн[а-яё]*\s+данн|обработк[а-яё]*\s+персональн/,
   );
 
   const factors: Factor[] = [
@@ -555,7 +558,9 @@ function check3(s: SiteSnapshot): CheckResult {
 
 /** 4. Согласие на обработку ПДн — отдельный документ с обязательным составом. */
 function check4(s: SiteSnapshot): CheckResult {
-  const link = findLink(s, ['soglasie', 'consent'], /соглас\w*\s+на\s+обработку|даю\s+соглас/);
+  // \w* кириллицу не берёт — «согласие»/«согласия» перед \s+обработку никогда
+  // не матчились (находка №2 отчёта), заменено на [а-яё]*.
+  const link = findLink(s, ['soglasie', 'consent'], /соглас[а-яё]*\s+на\s+обработку|даю\s+соглас/);
   const doc = findDocPage(s, ['soglasie', 'consent', 'согласие на обработку']);
 
   const factors: Factor[] = [
@@ -629,7 +634,9 @@ function check5(s: SiteSnapshot): CheckResult {
   const link = findLink(
     s,
     ['oferta', 'public-offer', 'agreement', 'soglashenie', 'terms', 'usloviya'],
-    /оферт|пользовательск\w*\s+соглашени|соглашени\w*\s+об\s+использован|лицензионн\w*\s+соглашени|услови\w*\s+использован/,
+    // 4 из 5 альтернатив использовали \w* рядом с кириллицей и не срабатывали
+    // никогда, включая целевую «пользовательское соглашение» (находка №3).
+    /оферт|пользовательск[а-яё]*\s+соглашени|соглашени[а-яё]*\s+об\s+использован|лицензионн[а-яё]*\s+соглашени|услови[а-яё]*\s+использован/,
   );
 
   const factors: Factor[] = [
@@ -670,7 +677,11 @@ function hasConsentAction($: cheerio.CheerioAPI, el: AnyNode): boolean {
   $el.find('button, a, input[type="button"], input[type="submit"]').each((_, b) => {
     if (found) return;
     const t = `${$(b).text()} ${$(b).attr('value') ?? ''}`.toLowerCase();
-    if (/приня|соглас|хорошо|ок\b|понятно|accept|agree|allow|got it/.test(t)) found = true;
+    // `ок\b` не годится: \b — переход \w<->не-\w, а кириллическая «к» это не
+    // \w, поэтому граница после «ок» никогда не находилась (находка №4 отчёта).
+    // Нужна не просто замена класса, а явная проверка «дальше не буква» —
+    // иначе «ок» ловится и внутри «около»/«окно»/«оказалось».
+    if (/приня|соглас|хорошо|(?<![a-zа-яё])ок(?![a-zа-яё])|понятно|accept|agree|allow|got it/.test(t)) found = true;
   });
   return found;
 }
@@ -761,7 +772,8 @@ function check6(s: SiteSnapshot): CheckResult {
   const hasPolicyLink = links.some(
     (l) =>
       (/konfidencial|privacy|policy|personal-?data|politika-konfidencial/.test(l.href) && !WRONG_DOC.test(l.href)) ||
-      /конфиденциальн|персональн\w*\s+данн/.test(l.text),
+      // \w* та же находка №5: «персональных данных» без \w* не матчилась.
+      /конфиденциальн|персональн[а-яё]*\s+данн/.test(l.text),
   );
   const hasCookieLink = links.some(
     (l) => /cookie|kuki/.test(l.href) || /куки|cookie/.test(l.text),
@@ -987,7 +999,9 @@ function check8(s: SiteSnapshot): CheckResult {
     });
   } else {
     const t = policy.text.toLowerCase();
-    const mentionsMailing = /рассылк|информационн\w* сообщени/.test(t);
+    // \w* та же находка №6: «информационные сообщения» без \w* не матчилась —
+    // после «информационн» перед пробелом всегда кириллическое окончание.
+    const mentionsMailing = /рассылк|информационн[а-яё]* сообщени/.test(t);
     const separates = /рекламн/.test(t) && /информационн/.test(t);
     factors.push({
       name: 'Рассылка описана в целях Политики',

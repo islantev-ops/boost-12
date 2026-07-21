@@ -1,8 +1,39 @@
 import * as cheerio from 'cheerio';
 import type { CrawledPage, SiteSnapshot } from './types';
 import { BrowserSession } from './browser';
+import { templateFingerprint } from './fingerprint';
 
-const MAX_PAGES = 18;
+const MAX_PAGES = 300;
+const CRAWL_MS = 20 * 60 * 1000;
+const POLITE_DELAY_MS = 500;
+const PER_TEMPLATE = 5;
+
+/**
+ * Форма адреса страницы: последний сегмент пути заменяется звёздочкой.
+ * `/catalog/drel-123/` → `/catalog/*`, `/404` → `/404`, `/news/406/` → `/news/*`.
+ *
+ * Нужна вместе с отпечатком разметки, потому что отпечаток НЕ различает
+ * структурно одинаковые страницы: у «404» и «Спасибо за заказ» одинаковый
+ * каркас (заголовок, абзац, кнопка, общая шапка), и по разметке они
+ * неотличимы в принципе. Если сгруппировать их вместе, лимит на группу может
+ * съесть одну из них, и мы пропустим непроверенную страницу — та самая беда,
+ * из-за которой не открывалась `/career/`. Адреса же у них разные, и по
+ * адресу они расходятся. Карточки товара при этом остаются одной группой.
+ */
+export function urlShape(rawUrl: string): string {
+  let path: string;
+  try {
+    path = new URL(rawUrl).pathname;
+  } catch {
+    return rawUrl;
+  }
+  const segments = path.split('/').filter(Boolean);
+  if (segments.length <= 1) return `/${segments[0] ?? ''}`;
+  return `/${segments.slice(0, -1).join('/')}/*`;
+}
+
+/** Не ставим в очередь то, что не является HTML-страницей. */
+const SKIP_EXT = /\.(pdf|docx?|xlsx?|pptx?|zip|rar|7z|png|jpe?g|gif|svg|webp|ico|mp4|mp3|avi|css|js|json|xml|rss)$/i;
 
 /**
  * Типовые адреса документов. Проверяем их напрямую, даже если на них нет
@@ -191,7 +222,7 @@ function sameHost(a: string, b: string): boolean {
 }
 
 /** Собирает внутренние ссылки, приоритезируя страницы с документами. */
-function collectLinks(html: string, base: string): string[] {
+function collectLinksScored(html: string, base: string): { url: string; score: number }[] {
   const $ = cheerio.load(html);
   const scored: { url: string; score: number }[] = [];
   const seen = new Set<string>();
@@ -215,13 +246,20 @@ function collectLinks(html: string, base: string): string[] {
     if (DOC_TEXT_HINTS.some((h) => text.includes(h))) score += 8;
     if (FORM_HINTS.some((h) => path.includes(h))) score += 6;
     if (FORM_TEXT_HINTS.some((h) => text.includes(h))) score += 5;
-    if (score > 0) scored.push({ url: abs, score });
+    // Скор больше НЕ фильтр, а приоритет: страницы документов и форм идут
+    // первыми, остальные — следом. Раньше `score > 0` выбрасывал всё
+    // остальное, и страница «Карьера» с формой не обходилась никогда.
+    if (SKIP_EXT.test(new URL(abs).pathname)) return;
+    scored.push({ url: abs, score });
   });
 
-  return scored.sort((a, b) => b.score - a.score).map((s) => s.url);
+  return scored.sort((a, b) => b.score - a.score);
 }
 
-export async function crawlSite(inputUrl: string): Promise<SiteSnapshot> {
+export async function crawlSite(
+  inputUrl: string,
+  onProgress?: (crawled: number, url: string) => void,
+): Promise<SiteSnapshot> {
   const start = normalizeUrl(inputUrl);
   const session = await BrowserSession.open();
   try {
@@ -265,36 +303,68 @@ export async function crawlSite(inputUrl: string): Promise<SiteSnapshot> {
       };
     }
 
-    const pages: CrawledPage[] = [{ url: home.url, status: home.status, html: home.html, text: home.text }];
+    const homePage: CrawledPage = { url: home.url, status: home.status, html: home.html, text: home.text };
+    const pages: CrawledPage[] = [homePage];
     const visited = new Set([home.url]);
+    // Ключ группы — форма адреса ВМЕСТЕ с отпечатком разметки. Одного
+    // отпечатка мало: структурно одинаковые, но разные по смыслу страницы
+    // («404» и «Спасибо за заказ») слились бы в одну группу и одна из них
+    // могла бы не попасть в обход.
+    const groupKey = (url: string, html: string) => `${urlShape(url)}|${templateFingerprint(html)}`;
+    const templates = new Map<string, number>([[groupKey(home.url, home.html), 1]]);
 
-    for (const link of collectLinks(home.html, home.url)) {
-      if (pages.length >= MAX_PAGES) break;
-      if (visited.has(link)) continue;
-      visited.add(link);
-      const page = await session.load(link);
-      // Заглушку антибота в снапшот не берём — она не про клиента.
-      if (page && !page.blocked) {
-        pages.push({ url: page.url, status: page.status, html: page.html, text: page.text });
+    // Очередь с приоритетом: документы и формы первыми, остальное следом.
+    const queue: { url: string; score: number }[] = [];
+    const discovered = new Set<string>([home.url]);
+    const enqueue = (html: string, base: string) => {
+      for (const { url, score } of collectLinksScored(html, base)) {
+        if (discovered.has(url)) continue;
+        discovered.add(url);
+        queue.push({ url, score });
       }
+    };
+    enqueue(home.html, home.url);
+
+    const deadline = Date.now() + CRAWL_MS;
+    let skippedByTemplate = 0;
+    let stopReason: 'done' | 'pageLimit' | 'timeLimit' = 'done';
+
+    while (queue.length) {
+      if (pages.length >= MAX_PAGES) { stopReason = 'pageLimit'; break; }
+      if (Date.now() > deadline) { stopReason = 'timeLimit'; break; }
+
+      queue.sort((a, b) => b.score - a.score);
+      const next = queue.shift()!;
+      if (visited.has(next.url)) continue;
+      visited.add(next.url);
+
+      await new Promise((r) => setTimeout(r, POLITE_DELAY_MS));
+      const page = await session.load(next.url);
+      if (!page || page.blocked || page.status !== 200) continue;
+
+      // Однотипных страниц (карточки товара) берём ограниченное число.
+      const key = groupKey(page.url, page.html);
+      const seenOfTemplate = templates.get(key) ?? 0;
+      if (seenOfTemplate >= PER_TEMPLATE) { skippedByTemplate++; continue; }
+      templates.set(key, seenOfTemplate + 1);
+
+      const cp: CrawledPage = { url: page.url, status: page.status, html: page.html, text: page.text };
+      pages.push(cp);
+      onProgress?.(pages.length, cp.url);
+      enqueue(cp.html, cp.url);
     }
 
-    // Контрольный запрос по заведомо несуществующему адресу — фингерпринт soft-404.
+    // Документы, опубликованные, но не прилинкованные ниоткуда.
     const canary = await session.load(new URL(`/nnq-${'probe'}-404-check/`, home.url).toString());
     const canarySignature =
       canary && !canary.blocked && canary.status === 200
         ? signature({ url: canary.url, status: canary.status, html: canary.html, text: canary.text })
         : null;
 
-    // Документы, опубликованные, но не прилинкованные с главной.
     for (const path of PROBE_PATHS) {
       if (pages.length >= MAX_PAGES) break;
       let probe: string;
-      try {
-        probe = new URL(path, home.url).toString();
-      } catch {
-        continue;
-      }
+      try { probe = new URL(path, home.url).toString(); } catch { continue; }
       if (visited.has(probe)) continue;
       visited.add(probe);
       const page = await session.load(probe);
@@ -314,7 +384,14 @@ export async function crawlSite(inputUrl: string): Promise<SiteSnapshot> {
       clientRendered: detectClientRendered(home.html),
       footerVisible: detectFooter(home.html, home.url),
       blockedByAntibot: false,
-      coverage: { crawled: pages.length, discovered: pages.length, skippedByTemplate: 0, skippedByLimit: 0, complete: true, stopReason: 'done' },
+      coverage: {
+        crawled: pages.length,
+        discovered: discovered.size,
+        skippedByTemplate,
+        skippedByLimit: stopReason === 'done' ? 0 : queue.length,
+        complete: stopReason === 'done',
+        stopReason,
+      },
       hosting: null,
       pages,
     };

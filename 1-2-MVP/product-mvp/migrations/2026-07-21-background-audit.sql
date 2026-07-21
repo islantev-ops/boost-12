@@ -51,3 +51,12 @@ CREATE TABLE IF NOT EXISTS pages (
 );
 
 CREATE INDEX IF NOT EXISTS idx_pages_audit ON pages(audit_id);
+
+-- Владелец новой таблицы. Миграция запускается от суперпользователя
+-- (`sudo -u postgres`), поэтому созданная таблица достаётся ему, а приложение
+-- ходит в базу под пользователем `audit` — и получает «permission denied for
+-- table pages» на первом же аудите. Проверено на боевом 2026-07-21: аудит
+-- честно упал с этим текстом. Остальные таблицы принадлежат `audit`, приводим
+-- новую к тому же виду.
+ALTER TABLE pages OWNER TO audit;
+ALTER SEQUENCE pages_id_seq OWNER TO audit;

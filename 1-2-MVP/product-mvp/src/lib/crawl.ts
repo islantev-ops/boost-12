@@ -3,7 +3,6 @@ import type { CrawledPage, SiteSnapshot } from './types';
 import { BrowserSession, type LoadResult } from './browser';
 import { templateFingerprint } from './fingerprint';
 
-const MAX_PAGES = 300;
 const CRAWL_MS = 20 * 60 * 1000;
 const POLITE_DELAY_MS = 500;
 const PER_TEMPLATE = 5;
@@ -15,12 +14,41 @@ const PER_TEMPLATE = 5;
  * уронить процесс посреди аудита. 150 МБ — с запасом ниже худшего случая.
  */
 export const MAX_TOTAL_HTML = 150_000_000;
-// Слоты, зарезервированные под PROBE_PATHS. Без резерва основной обход на
-// крупном сайте (каталог сам по себе даёт 300 страниц) выедает MAX_PAGES
-// целиком, и подстраховка не срабатывает НИКОГДА — то есть отключается
-// именно там, где нужнее всего: на сайтах, где документ не прилинкован, а
-// каталог большой. Резерв меньше основного бюджета, но гарантирован всегда.
-const RESERVED_FOR_PROBES = 20;
+/**
+ * Бюджетов у обхода три: страницы, время (`deadline`), объём HTML.
+ * Резерв нужен под ВСЕ три — иначе на крупном и медленном сайте (большой
+ * каталог) основной цикл выедает время или объём целиком ДО фазы проб, и
+ * подстраховка (PROBE_PATHS) не срабатывает НИКОГДА — то есть отключается
+ * именно там, где нужнее всего: там, где документ вероятнее всего не
+ * прилинкован, а каталог большой и медленный. Раньше был зарезервирован
+ * только лимит страниц (RESERVED_FOR_PROBES) — резерв был гарантирован
+ * только для одного бюджета из трёх, для времени и объёма его не было
+ * вовсе. Ниже — резерв для всех трёх: основной цикл получает урезанные
+ * бюджеты (см. `MAX_PAGES - RESERVED_FOR_PROBES` и т.п. в `crawlSite`),
+ * фаза проб проверяет полные.
+ */
+export const MAX_PAGES = 300;
+export const RESERVED_FOR_PROBES = 20;
+/**
+ * До 17 адресов в PROBE_PATHS плюс один канареечный запрос (проверка «страница
+ * не найдена» перед пробами) — итого до 18 загрузок браузером. Каждая:
+ * POLITE_DELAY_MS (500 мс) паузы + сама загрузка страницы. В живых прогонах
+ * (см. отчёт задачи 3, раунд 1) загрузка занимала порядка 2-3 с. Верхняя
+ * оценка на загрузку — 3 с: 18 × (500 + 3000) = 63 000 мс ≈ 63 с.
+ * Берём 90 000 мс (90 с) — примерно на 40% больше расчёта, с запасом на
+ * более медленные страницы и на то, что оценка 2-3 с не гарантия, а
+ * наблюдение с ограниченного числа живых прогонов.
+ */
+export const RESERVED_MS = 90_000;
+/**
+ * До 17 проб, каждая — страница HTML. Верхняя граница размера страницы взята
+ * из комментария у MAX_TOTAL_HTML выше («300 страниц по 200-500 КБ») — берём
+ * 500 КБ (500 000 байт) как потолок на одну пробу: 17 × 500 000 = 8 500 000
+ * байт ≈ 8.5 МБ. Округляем вверх до 10 000 000 (10 МБ) — запас на случай,
+ * если отдельная страница-документ (например, длинная оферта) окажется
+ * крупнее типовой карточки каталога.
+ */
+export const RESERVED_BYTES = 10_000_000;
 
 /**
  * Форма адреса страницы: последний сегмент пути заменяется звёздочкой.
@@ -125,14 +153,28 @@ function normalizeUrl(raw: string): string {
   return trimmed;
 }
 
-/** Параметры отслеживания: не меняют содержимое страницы, только дублируют её в очереди. */
-const TRACKING_PARAMS = new Set(['yclid', 'gclid', 'from', 'ref']);
+/**
+ * Параметры отслеживания: не меняют содержимое страницы, только дублируют её
+ * в очереди. `ref` и `from` сюда НЕ входят: на части сайтов `?ref=SKU123`
+ * реально меняет содержимое (партнёрская метка, влияющая на выдачу), и,
+ * отбросив их, мы молча схлопнули бы разные страницы в одну — то есть сами
+ * спровоцировали бы пропуск страницы.
+ */
+const TRACKING_PARAMS = new Set(['yclid', 'gclid']);
 
 /**
- * Приводит адрес к каноническому виду перед постановкой в очередь и перед
- * проверкой `discovered`. Без этого один и тот же документ ставится в очередь
- * снова и снова под разными масками (якорь, utm-метка, слеш на конце) — и
- * бюджет обхода уходит на копии одной страницы вместо новых.
+ * Приводит адрес к каноническому виду — но ТОЛЬКО как ключ дедупликации
+ * (`discovered`, `visited`), не как адрес запроса. Без этого один и тот же
+ * документ считается новым снова и снова под разными масками (якорь,
+ * utm-метка, слеш на конце) — и бюджет обхода уходит на копии одной страницы
+ * вместо новых.
+ *
+ * Раньше нормализованная форма клалась в очередь напрямую и именно она
+ * запрашивалась — из-за этого обрезание завершающего слеша меняло РЕАЛЬНЫЙ
+ * адрес запроса: на сервере без автоматического редиректа `/path` → `/path/`
+ * мы получали бы 404 там, где страница есть. Это пропуск страницы,
+ * спровоцированный нашим же кодом. Теперь запрос всегда идёт по
+ * оригинальному адресу — см. `toQueueEntry`.
  *
  * Путь НЕ приводим к нижнему регистру: часть серверов (в первую очередь на
  * Linux-хостинге) различает `/Page` и `/page` как разные ресурсы, и склейка
@@ -159,6 +201,18 @@ export function normalizeForQueue(rawUrl: string): string {
     u.pathname = u.pathname.replace(/\/+$/, '');
   }
   return u.toString();
+}
+
+/**
+ * Разделяет то, что кладём в очередь, на два разных понятия: `url` — адрес,
+ * который реально будет запрошен (оригинал, БЕЗ нормализации), и `key` —
+ * нормализованная форма для дедупликации (`discovered`/`visited`). Раньше
+ * очередь хранила только нормализованный адрес и запрашивала именно его —
+ * см. комментарий у `normalizeForQueue` про пропуск страницы на серверах без
+ * редиректа `/path` → `/path/`.
+ */
+export function toQueueEntry(url: string): { url: string; key: string } {
+  return { url, key: normalizeForQueue(url) };
 }
 
 export function htmlToText(html: string): string {
@@ -313,6 +367,12 @@ function collectLinksScored(html: string, base: string): { url: string; score: n
  * страниц важнее лимита времени, лимит времени важнее бюджета по объёму —
  * при одновременном срабатывании отчёт должен называть ОДНУ причину, и это
  * всегда самая ранняя по этому списку.
+ *
+ * `pageLimit` и `sizeLimit` — параметры (не всегда `MAX_PAGES`/`MAX_TOTAL_HTML`
+ * напрямую): основной цикл вызывает функцию с урезанными бюджетами
+ * (`MAX_PAGES - RESERVED_FOR_PROBES`, `MAX_TOTAL_HTML - RESERVED_BYTES`),
+ * фаза проб — с полными. `sizeLimit` по умолчанию равен `MAX_TOTAL_HTML`,
+ * чтобы старые вызовы (без резерва) не потребовали правки.
  */
 export function checkBudgets(
   pagesCount: number,
@@ -320,10 +380,11 @@ export function checkBudgets(
   now: number,
   deadline: number,
   pageLimit: number,
+  sizeLimit: number = MAX_TOTAL_HTML,
 ): 'pageLimit' | 'timeLimit' | 'sizeLimit' | null {
   if (pagesCount >= pageLimit) return 'pageLimit';
   if (now > deadline) return 'timeLimit';
-  if (totalHtmlBytes > MAX_TOTAL_HTML) return 'sizeLimit';
+  if (totalHtmlBytes > sizeLimit) return 'sizeLimit';
   return null;
 }
 
@@ -332,6 +393,29 @@ export type PageLoader = (url: string, opts?: { extraWaitMs?: number }) => Promi
 
 /** Сколько ждать дорисовки подвала при повторном чтении. Коротко — обычные сайты этой ветки не проходят вовсе. */
 const FOOTER_RETRY_WAIT_MS = 2500;
+
+/**
+ * После скольких неудачных повторов ПОДРЯД (повтор сделан, ссылок всё равно
+ * 0) выключаем автоповтор до конца обхода. `loadWithFooterRetry` не различает
+ * «подвал ещё не дорисован» и «на странице честно нет внутренних ссылок» —
+ * обе дают 0 ссылок и получают повтор с ожиданием FOOTER_RETRY_WAIT_MS. На
+ * сайте с сотней законных тупиковых страниц это добавляет минуты и
+ * приближает timeLimit (который сам отключает фазу проб). Если три раза
+ * подряд повтор не помог — сайт, вероятнее всего, просто не дорисовывает
+ * подвал скриптом (или дорисовывает не в эту сторону), и платить за повтор
+ * дальше незачем: тупиковые страницы на этом сайте — законные тупики.
+ */
+export const FOOTER_RETRY_MAX_FAILURES = 3;
+
+/** Состояние обучения повтора — общее на весь обход, не на одну страницу. */
+export interface FooterRetryState {
+  consecutiveFailures: number;
+  disabled: boolean;
+}
+
+export function createFooterRetryState(): FooterRetryState {
+  return { consecutiveFailures: 0, disabled: false };
+}
 
 /**
  * Часть сайтов дорисовывает подвал (а вместе с ним — всю навигацию) скриптом
@@ -344,15 +428,39 @@ const FOOTER_RETRY_WAIT_MS = 2500;
  * Чиним точечно: если первое чтение дало ноль внутренних ссылок — повторяем
  * чтение той же страницы РОВНО один раз с коротким ожиданием (не циклом).
  * Обычные страницы (где ссылки нашлись сразу) второй вызов `load` не платят.
+ *
+ * `state` — необязателен: без него (как в старых вызовах и тестах) поведение
+ * прежнее, повтор выполняется всегда. С ним — обход самообучается (см.
+ * `FOOTER_RETRY_MAX_FAILURES`): после серии неудач подряд повтор перестаёт
+ * выполняться, успешный повтор счётчик неудач сбрасывает.
  */
-export async function loadWithFooterRetry(load: PageLoader, url: string): Promise<LoadResult> {
+export async function loadWithFooterRetry(
+  load: PageLoader,
+  url: string,
+  state?: FooterRetryState,
+): Promise<LoadResult> {
   const first = await load(url);
   // Страница не загрузилась вовсе или осталась заглушкой антибота — повторное
   // чтение той же страницы тут не поможет, это другая причина и другая логика.
   if (!first || first.blocked) return first;
   if (collectLinksScored(first.html, first.url).length > 0) return first;
 
+  // Обучение уже решило: три неудачи подряд — сайт не дорисовывает подвал,
+  // платить за ещё один повтор незачем.
+  if (state?.disabled) return first;
+
   const retried = await load(url, { extraWaitMs: FOOTER_RETRY_WAIT_MS });
+  const retrySucceeded = !!retried && collectLinksScored(retried.html, retried.url).length > 0;
+
+  if (state) {
+    if (retrySucceeded) {
+      state.consecutiveFailures = 0;
+    } else {
+      state.consecutiveFailures += 1;
+      if (state.consecutiveFailures >= FOOTER_RETRY_MAX_FAILURES) state.disabled = true;
+    }
+  }
+
   return retried ?? first;
 }
 
@@ -363,11 +471,13 @@ export async function crawlSite(
   const start = normalizeUrl(inputUrl);
   const session = await BrowserSession.open();
   const load: PageLoader = (u, opts) => session.load(u, opts);
+  // Общее на весь обход состояние обучения повтора — см. FOOTER_RETRY_MAX_FAILURES.
+  const footerRetryState = createFooterRetryState();
   try {
-    let home = await loadWithFooterRetry(load, start);
+    let home = await loadWithFooterRetry(load, start, footerRetryState);
     // https не ответил — пробуем http, но фиксируем это честно
     if (!home && start.startsWith('https://')) {
-      home = await loadWithFooterRetry(load, start.replace(/^https:/, 'http:'));
+      home = await loadWithFooterRetry(load, start.replace(/^https:/, 'http:'), footerRetryState);
     }
 
     if (!home) {
@@ -407,14 +517,17 @@ export async function crawlSite(
     const homePage: CrawledPage = { url: home.url, status: home.status, html: home.html, text: home.text };
     const pages: CrawledPage[] = [homePage];
     onProgress?.(pages.length, homePage.url);
-    // `visited` НЕ дублирует дедупликацию очереди: URL попадает в `queue`
-    // ровно один раз (это гарантирует проверка `discovered.has` внутри
-    // enqueue — до того, как элемент попадёт в очередь), поэтому проверка
-    // «уже видели» в основном цикле была бы недостижима. `visited` нужен
-    // отдельно — чтобы фаза проб (PROBE_PATHS) не запрашивала повторно адрес,
-    // который уже пришёл через обычные ссылки и обход, и чтобы не бить по
-    // одному адресу дважды между пробами.
-    const visited = new Set([home.url]);
+    const homeKey = normalizeForQueue(home.url);
+    // `visited` хранит КЛЮЧИ (нормализованную форму), не адреса — см.
+    // `toQueueEntry`. Она НЕ дублирует дедупликацию очереди: ключ попадает в
+    // `discovered` ровно один раз (это гарантирует проверка `discovered.has`
+    // внутри enqueue — до того, как элемент попадёт в очередь), поэтому
+    // проверка «уже видели» в основном цикле была бы недостижима. `visited`
+    // нужен отдельно — чтобы фаза проб (PROBE_PATHS) не запрашивала повторно
+    // адрес, который уже пришёл через обычные ссылки и обход (по тому же
+    // ключу — см. правку про пробы ниже), и чтобы не бить по одному адресу
+    // дважды между пробами.
+    const visited = new Set([homeKey]);
     // Ключ группы — форма адреса ВМЕСТЕ с отпечатком разметки. Одного
     // отпечатка мало: структурно одинаковые, но разные по смыслу страницы
     // («404» и «Спасибо за заказ») слились бы в одну группу и одна из них
@@ -423,23 +536,30 @@ export async function crawlSite(
     const templates = new Map<string, number>([[groupKey(home.url, home.html), 1]]);
 
     // Очередь с приоритетом: документы и формы первыми, остальное следом.
-    const queue: { url: string; score: number }[] = [];
-    const discovered = new Set<string>([home.url]);
+    // `url` — ОРИГИНАЛЬНЫЙ адрес (запрашивается он, не `key`): нормализация
+    // обрезает завершающий слеш, а на сервере без редиректа `/path` → `/path/`
+    // запрос по обрезанному адресу дал бы 404 там, где страница есть. `key` —
+    // только для дедупликации (`discovered`/`visited`).
+    const queue: { url: string; key: string; score: number }[] = [];
+    const discovered = new Set<string>([homeKey]);
     const enqueue = (html: string, base: string) => {
       for (const { url, score } of collectLinksScored(html, base)) {
-        // Нормализация ДО проверки discovered: без неё один и тот же документ
-        // с разным регистром хоста, якорем, utm-меткой или слешем на конце
-        // считается новым адресом каждый раз и съедает бюджет обхода копиями
-        // одной страницы вместо новых.
-        const normalized = normalizeForQueue(url);
-        if (discovered.has(normalized)) continue;
-        discovered.add(normalized);
+        const { url: queueUrl, key } = toQueueEntry(url);
+        // Дедупликация ДО постановки в очередь: без неё один и тот же
+        // документ с разным регистром хоста, якорем, utm-меткой или слешем на
+        // конце считается новым адресом каждый раз и съедает бюджет обхода
+        // копиями одной страницы вместо новых.
+        if (discovered.has(key)) continue;
+        discovered.add(key);
         // Если после очистки трекинга в адресе остались query-параметры — это
         // почти всегда фильтр каталога или пагинация. Не выбрасываем совсем
         // (`?page=2` может вести на страницы, которых больше нигде нет), но
-        // обходим их последними: скор на 1 меньше.
-        const hasQuery = normalized.includes('?');
-        queue.push({ url: normalized, score: hasQuery ? score - 1 : score });
+        // обходим их последними: скор на 1 меньше. Смотрим на КЛЮЧ (после
+        // очистки трекинга), не на исходный адрес — иначе `?ref=SKU123`
+        // (трекингом не считается, см. TRACKING_PARAMS) занизил бы скор
+        // странице, у которой на самом деле нет фильтра.
+        const hasQuery = key.includes('?');
+        queue.push({ url: queueUrl, key, score: hasQuery ? score - 1 : score });
       }
     };
     enqueue(home.html, home.url);
@@ -451,18 +571,29 @@ export async function crawlSite(
     let totalHtmlBytes = home.html.length;
 
     while (queue.length) {
-      // Лимит основного обхода урезан на RESERVED_FOR_PROBES: иначе крупный
-      // каталог выбирает весь MAX_PAGES ДО фазы проб, и подстраховка ниже
-      // отключается целиком именно там, где она нужнее всего.
-      const budget = checkBudgets(pages.length, totalHtmlBytes, Date.now(), deadline, MAX_PAGES - RESERVED_FOR_PROBES);
+      // Основной цикл проверяется по УРЕЗАННЫМ бюджетам — всем трём, не
+      // только по страницам: RESERVED_FOR_PROBES страниц, RESERVED_MS
+      // времени, RESERVED_BYTES объёма. Без этого резерва крупный и
+      // медленный сайт (большой каталог) выедает время или объём целиком ДО
+      // фазы проб, и подстраховка ниже отключается именно там, где она
+      // нужнее всего. Фаза проб ниже проверяется по ПОЛНЫМ бюджетам — резерв
+      // предназначен именно ей.
+      const budget = checkBudgets(
+        pages.length,
+        totalHtmlBytes,
+        Date.now(),
+        deadline - RESERVED_MS,
+        MAX_PAGES - RESERVED_FOR_PROBES,
+        MAX_TOTAL_HTML - RESERVED_BYTES,
+      );
       if (budget) { stopReason = budget; break; }
 
       queue.sort((a, b) => b.score - a.score);
       const next = queue.shift()!;
-      visited.add(next.url);
+      visited.add(next.key);
 
       await new Promise((r) => setTimeout(r, POLITE_DELAY_MS));
-      const page = await loadWithFooterRetry(load, next.url);
+      const page = await loadWithFooterRetry(load, next.url, footerRetryState);
       if (!page || page.blocked || page.status !== 200) continue;
 
       // Однотипных страниц (карточки товара) берём ограниченное число.
@@ -487,19 +618,32 @@ export async function crawlSite(
         : null;
 
     for (const path of PROBE_PATHS) {
-      // Пробы ограничены полным MAX_PAGES (не урезанным), а не наоборот:
-      // именно под них зарезервированы RESERVED_FOR_PROBES слотов выше.
-      // Потолок страниц здесь НЕ переписывает stopReason (как и раньше) —
-      // молчаливый break здесь не поведенческая правка задачи 3, оставляем
-      // как было. Объём и время — переписывают, это и есть новая честная
-      // остановка.
-      if (pages.length >= MAX_PAGES) break;
-      if (Date.now() > deadline) { stopReason = 'timeLimit'; break; }
-      if (totalHtmlBytes > MAX_TOTAL_HTML) { stopReason = 'sizeLimit'; break; }
+      // Пробы проверяются по ПОЛНЫМ бюджетам (MAX_PAGES, MAX_TOTAL_HTML,
+      // deadline без вычета RESERVED_MS/RESERVED_BYTES) — именно под них
+      // зарезервированы RESERVED_FOR_PROBES/RESERVED_MS/RESERVED_BYTES выше.
+      // Если основной цикл честно уложился в урезанные бюджеты, здесь всегда
+      // остаётся резерв — фаза проб проверяет это ещё раз перед КАЖДОЙ пробой,
+      // потому что сама проба тоже тратит время и байты.
+      //
+      // `full` называет причину, по которой остановился бы обход, если бы
+      // резерва не хватило. `pageLimit` здесь НЕ переписывает stopReason (как
+      // и раньше) — молчаливый break здесь не поведенческая правка задачи 3,
+      // оставляем как было. Время и объём переписывают stopReason — но при
+      // верно посчитанном резерве это практически недостижимо: пробы
+      // укладываются в резерв, и stopReason остаётся тем, что дал основной
+      // цикл (обычно 'done', либо урезанный лимит, которым он и остановился).
+      const full = checkBudgets(pages.length, totalHtmlBytes, Date.now(), deadline, MAX_PAGES);
+      if (full === 'pageLimit') break;
+      if (full === 'timeLimit' || full === 'sizeLimit') { stopReason = full; break; }
+
       let probe: string;
       try { probe = new URL(path, home.url).toString(); } catch { continue; }
-      if (visited.has(probe)) continue;
-      visited.add(probe);
+      // Тот же ключ дедупликации, что и у обычной очереди: без нормализации
+      // проверка `visited.has(probe)` не находила совпадения с уже обойдённой
+      // страницей (адрес со слешем vs без) и делала лишний запрос.
+      const probeKey = normalizeForQueue(probe);
+      if (visited.has(probeKey)) continue;
+      visited.add(probeKey);
       await new Promise((r) => setTimeout(r, POLITE_DELAY_MS));
       const page = await session.load(probe);
       if (!page || page.blocked || page.status !== 200) continue;
@@ -522,7 +666,7 @@ export async function crawlSite(
       // отражать ВСЕ найденные адреса (обычным обходом и пробами), иначе в
       // отчёте «обойдено N из M найденных» получается N > M — числа, которые
       // противоречат сами себе на первый взгляд читателя.
-      discovered.add(probe);
+      discovered.add(probeKey);
       onProgress?.(pages.length, cp.url);
     }
 

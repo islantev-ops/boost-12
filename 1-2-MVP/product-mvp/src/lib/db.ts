@@ -1,7 +1,8 @@
 import { Pool } from 'pg';
-import type { AuditResult, DocRef, Evidence, Factor, Finding, Verdict } from './types';
+import type { AuditResult, CrawlCoverage, DocRef, Evidence, Factor, Finding, Verdict } from './types';
 import type { Method, NormKey } from './legal';
 import { buildLetter } from './letter';
+import { templateFingerprint } from './fingerprint';
 
 /**
  * PostgreSQL живёт на VPS и слушает только localhost — наружу не открыт.
@@ -52,6 +53,10 @@ export type AuditRow = {
   blocked_by_antibot: boolean;
   demo: boolean;
   created_at: string;
+  status: string;
+  pages_crawled: number;
+  current_url: string | null;
+  coverage: CrawlCoverage | null;
 };
 
 export type FindingRow = {
@@ -127,6 +132,52 @@ export async function getAudit(id: number) {
   }
 }
 
+/** Заводит запись до начала работы: клиент сразу получает id и следит за прогрессом. */
+export async function createQueuedAudit(inputUrl: string): Promise<number> {
+  const { rows } = await getPool().query<{ id: number }>(
+    `INSERT INTO audits (input_url, final_url, cms, reachable, client_rendered, status)
+     VALUES ($1, $1, NULL, true, false, 'queued') RETURNING id`,
+    [inputUrl],
+  );
+  return rows[0].id;
+}
+
+export async function setAuditStatus(
+  id: number,
+  status: string,
+  patch: { pagesCrawled?: number; currentUrl?: string | null; error?: string | null } = {},
+): Promise<void> {
+  await getPool().query(
+    `UPDATE audits SET status = $2,
+       pages_crawled = COALESCE($3, pages_crawled),
+       current_url   = COALESCE($4, current_url),
+       error         = COALESCE($5, error)
+     WHERE id = $1`,
+    [id, status, patch.pagesCrawled ?? null, patch.currentUrl ?? null, patch.error ?? null],
+  );
+}
+
+export async function getAuditStatus(id: number) {
+  const { rows } = await getPool().query<{ status: string; pages_crawled: number; current_url: string | null }>(
+    'SELECT status, pages_crawled, current_url FROM audits WHERE id = $1',
+    [id],
+  );
+  return rows[0] ?? null;
+}
+
+/**
+ * Перезапуск сервера посреди аудита оставил бы задачу висеть в «crawling»
+ * навсегда. Помечаем такие честно — «прервано», а не делаем вид, что работа идёт.
+ */
+export async function failStaleAudits(): Promise<number> {
+  const { rowCount } = await getPool().query(
+    `UPDATE audits SET status = 'failed',
+       error = COALESCE(error, 'Проверка прервана перезапуском сервера. Запустите её заново.')
+     WHERE status IN ('queued','crawling','checking')`,
+  );
+  return rowCount ?? 0;
+}
+
 /** Сохраняет результат аудита целиком: аудит + находки + письмо + англицизмы. */
 export async function saveAudit(result: AuditResult): Promise<number> {
   const client = await getPool().connect();
@@ -190,6 +241,78 @@ export async function saveAudit(result: AuditResult): Promise<number> {
 
     await client.query('COMMIT');
     return auditId;
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Дописывает результат в уже заведённую запись (её id клиент получил сразу).
+ * Страницы сохраняем целиком: без них аудит невоспроизводим.
+ */
+export async function finishAudit(id: number, result: AuditResult): Promise<void> {
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    const { snapshot, findings, anglicisms } = result;
+
+    await client.query(
+      `UPDATE audits SET final_url = $2, cms = $3, reachable = $4, error = $5,
+         client_rendered = $6, blocked_by_antibot = $7, coverage = $8,
+         pages_crawled = $9, current_url = NULL,
+         status = CASE WHEN $7 THEN 'blocked' ELSE 'done' END
+       WHERE id = $1`,
+      [
+        id, snapshot.finalUrl, snapshot.cms, snapshot.reachable, snapshot.error ?? null,
+        snapshot.clientRendered, snapshot.blockedByAntibot,
+        JSON.stringify(snapshot.coverage), snapshot.coverage.crawled,
+      ],
+    );
+
+    for (const p of snapshot.pages) {
+      await client.query(
+        'INSERT INTO pages (audit_id, url, status, html, text, template_hash) VALUES ($1,$2,$3,$4,$5,$6)',
+        [id, p.url, p.status, p.html, p.text, templateFingerprint(p.html)],
+      );
+    }
+
+    for (const f of findings) {
+      await client.query(
+        `INSERT INTO findings
+           (audit_id, check_id, title, what, verdict, method, summary, norms, factors, evidence, doc, severity)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        [
+          id, f.checkId, f.title, f.what, f.verdict, f.method, f.summary,
+          JSON.stringify(f.norms), JSON.stringify(f.factors), JSON.stringify(f.evidence),
+          f.doc ? JSON.stringify(f.doc) : null, f.severity,
+        ],
+      );
+    }
+
+    const { subject, body } = buildLetter(snapshot, findings);
+    if (body) {
+      await client.query('INSERT INTO letters (audit_id, subject, body) VALUES ($1, $2, $3)', [id, subject, body]);
+    }
+
+    for (const a of anglicisms.slice(0, 200)) {
+      await client.query(
+        'INSERT INTO anglicisms (audit_id, word, suggestion, url, context) VALUES ($1,$2,$3,$4,$5)',
+        [id, a.word, a.suggestion, a.url, a.context],
+      );
+    }
+
+    // Копии страниц тяжёлые и нужны недолго. Удаляем только их и только у
+    // старых аудитов — сами аудиты, находки и письма не трогаем НИКОГДА.
+    await client.query(
+      `DELETE FROM pages WHERE audit_id IN (
+         SELECT id FROM audits ORDER BY id DESC OFFSET 20
+       )`,
+    );
+
+    await client.query('COMMIT');
   } catch (e) {
     await client.query('ROLLBACK');
     throw e;

@@ -28,6 +28,22 @@ test('пустой HTML не роняет функцию (A, граница)', (
   assert.equal(typeof templateFingerprint(''), 'string');
 });
 
+test('undefined не роняет функцию и даёт тот же отпечаток, что пустая строка (A, граница)', () => {
+  // Код защищается через `html ?? ''` — проверяем сам этот случай, а не
+  // только пустую строку.
+  assert.equal(
+    templateFingerprint(undefined as unknown as string),
+    templateFingerprint('')
+  );
+});
+
+test('null не роняет функцию и даёт тот же отпечаток, что пустая строка (A, граница)', () => {
+  assert.equal(
+    templateFingerprint(null as unknown as string),
+    templateFingerprint('')
+  );
+});
+
 /* ── Три случая, найденные ревью 2026-07-21. Ради них и переделан подход. ── */
 
 const cardWithBadge = `<html><body>
@@ -59,4 +75,28 @@ test('огромная страница разбирается за разумн
   const t0 = Date.now();
   templateFingerprint(huge);
   assert.ok(Date.now() - t0 < 500, `отпечаток огромной страницы занял ${Date.now() - t0}мс`);
+});
+
+/* ── Ревью 2026-07-21, Critical 2: обрезка по длине строки не ограничивает
+   стоимость — квадратичный разбор битой/глубоко вложенной разметки. ── */
+
+test('100 000 незакрытых <b> обрабатываются быстро, а не квадратично (A, стоимость)', () => {
+  // Ровно предел MAX_HTML = 300_000 символов: '<b>' × 100 000 = 300 000
+  // символов. Раньше обрезка по длине строки ничего не резала — все 100 000
+  // тегов доходили до парсера, и построение дерева росло квадратично.
+  const brokenMarkup = `<html><body>${'<b>'.repeat(100_000)}</body></html>`;
+  const t0 = Date.now();
+  templateFingerprint(brokenMarkup);
+  const elapsed = Date.now() - t0;
+  assert.ok(elapsed < 500, `отпечаток 100 000 незакрытых <b> занял ${elapsed}мс`);
+});
+
+test('вложенность <div> глубиной 20 000 обрабатывается быстро (A, стоимость)', () => {
+  // Глубокая вложенность — другой вход с той же квадратичной болезнью
+  // парсера, не покрытый обрезкой по длине строки.
+  const deep = `<html><body>${'<div>'.repeat(20_000)}x${'</div>'.repeat(20_000)}</body></html>`;
+  const t0 = Date.now();
+  templateFingerprint(deep);
+  const elapsed = Date.now() - t0;
+  assert.ok(elapsed < 500, `отпечаток вложенности глубиной 20 000 занял ${elapsed}мс`);
 });

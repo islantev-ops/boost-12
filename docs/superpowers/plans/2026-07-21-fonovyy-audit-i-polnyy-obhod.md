@@ -451,6 +451,30 @@ const CRAWL_MS = 20 * 60 * 1000;
 const POLITE_DELAY_MS = 500;
 const PER_TEMPLATE = 5;
 
+/**
+ * Форма адреса страницы: последний сегмент пути заменяется звёздочкой.
+ * `/catalog/drel-123/` → `/catalog/*`, `/404` → `/404`, `/news/406/` → `/news/*`.
+ *
+ * Нужна вместе с отпечатком разметки, потому что отпечаток НЕ различает
+ * структурно одинаковые страницы: у «404» и «Спасибо за заказ» одинаковый
+ * каркас (заголовок, абзац, кнопка, общая шапка), и по разметке они
+ * неотличимы в принципе. Если сгруппировать их вместе, лимит на группу может
+ * съесть одну из них, и мы пропустим непроверенную страницу — та самая беда,
+ * из-за которой не открывалась `/career/`. Адреса же у них разные, и по
+ * адресу они расходятся. Карточки товара при этом остаются одной группой.
+ */
+export function urlShape(rawUrl: string): string {
+  let path: string;
+  try {
+    path = new URL(rawUrl).pathname;
+  } catch {
+    return rawUrl;
+  }
+  const segments = path.split('/').filter(Boolean);
+  if (segments.length <= 1) return `/${segments[0] ?? ''}`;
+  return `/${segments.slice(0, -1).join('/')}/*`;
+}
+
 /** Не ставим в очередь то, что не является HTML-страницей. */
 const SKIP_EXT = /\.(pdf|docx?|xlsx?|pptx?|zip|rar|7z|png|jpe?g|gif|svg|webp|ico|mp4|mp3|avi|css|js|json|xml|rss)$/i;
 ```
@@ -479,7 +503,12 @@ import { templateFingerprint } from './fingerprint';
     const homePage: CrawledPage = { url: home.url, status: home.status, html: home.html, text: home.text };
     const pages: CrawledPage[] = [homePage];
     const visited = new Set([home.url]);
-    const templates = new Map<string, number>([[templateFingerprint(home.html), 1]]);
+    // Ключ группы — форма адреса ВМЕСТЕ с отпечатком разметки. Одного
+    // отпечатка мало: структурно одинаковые, но разные по смыслу страницы
+    // («404» и «Спасибо за заказ») слились бы в одну группу и одна из них
+    // могла бы не попасть в обход.
+    const groupKey = (url: string, html: string) => `${urlShape(url)}|${templateFingerprint(html)}`;
+    const templates = new Map<string, number>([[groupKey(home.url, home.html), 1]]);
 
     // Очередь с приоритетом: документы и формы первыми, остальное следом.
     const queue: { url: string; score: number }[] = [];
@@ -511,10 +540,10 @@ import { templateFingerprint } from './fingerprint';
       if (!page || page.blocked || page.status !== 200) continue;
 
       // Однотипных страниц (карточки товара) берём ограниченное число.
-      const fp = templateFingerprint(page.html);
-      const seenOfTemplate = templates.get(fp) ?? 0;
+      const key = groupKey(page.url, page.html);
+      const seenOfTemplate = templates.get(key) ?? 0;
       if (seenOfTemplate >= PER_TEMPLATE) { skippedByTemplate++; continue; }
-      templates.set(fp, seenOfTemplate + 1);
+      templates.set(key, seenOfTemplate + 1);
 
       const cp: CrawledPage = { url: page.url, status: page.status, html: page.html, text: page.text };
       pages.push(cp);
@@ -586,20 +615,54 @@ function collectLinksScored(html: string, base: string): { url: string; score: n
 
 Старое имя `collectLinks` больше нигде не используется — удалить упоминания не требуется, функция одна.
 
-- [ ] **Step 5: Проверить типы и тесты**
+- [ ] **Step 5: Тесты на форму адреса (группировка)**
+
+Правило группировки — единственная защита от пропуска страниц, поэтому оно
+покрывается юнит-тестами. Создать `src/lib/crawl.test.ts`:
+
+```ts
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { urlShape } from './crawl';
+
+test('карточки одного раздела дают одну форму адреса (A)', () => {
+  assert.equal(urlShape('https://site.ru/catalog/drel-123/'), urlShape('https://site.ru/catalog/pila-456/'));
+});
+
+test('разные одиночные страницы не сливаются (A, защита от пропуска)', () => {
+  // Именно здесь ломался отпечаток разметки: у «404» и «Спасибо за заказ»
+  // каркас одинаковый, и по нему они неотличимы. Адрес их различает.
+  assert.notEqual(urlShape('https://site.ru/404'), urlShape('https://site.ru/thanks'));
+  assert.notEqual(urlShape('https://site.ru/career/'), urlShape('https://site.ru/compliance/'));
+});
+
+test('новости одного раздела группируются (A)', () => {
+  assert.equal(urlShape('https://site.ru/news/406/'), urlShape('https://site.ru/news/414/'));
+});
+
+test('главная и мусорный адрес не роняют функцию (A, граница)', () => {
+  assert.equal(typeof urlShape('https://site.ru/'), 'string');
+  assert.equal(typeof urlShape('не-адрес'), 'string');
+});
+```
+
+Run: `npm test`
+Expected: 4 новых теста зелёные.
+
+- [ ] **Step 6: Проверить типы и тесты**
 
 Run: `npx tsc --noEmit && npm test`
 Expected: типы чистые, все тесты проходят.
 
-- [ ] **Step 6: Интеграционный прогон на живом сайте**
+- [ ] **Step 7: Интеграционный прогон на живом сайте**
 
 Run: `npx tsx check-site.mts https://gdpgroup.ru/`
 Expected: `страниц:` заметно больше 5 (весь сайт — примерно 12–16 страниц), проверка 7 сообщает про найденную форму («во всех найденных формах сбора ПДн (1) есть чекбокс согласия»), а НЕ «форм не найдено». Прогон занимает пару минут — это нормально.
 
-- [ ] **Step 7: Коммит**
+- [ ] **Step 8: Коммит**
 
 ```bash
-git add src/lib/crawl.ts
+git add src/lib/crawl.ts src/lib/crawl.test.ts
 git commit -m "Обход всего сайта: приоритетная очередь вместо фильтра по ключевым словам"
 ```
 

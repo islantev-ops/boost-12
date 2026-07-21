@@ -41,7 +41,16 @@ export class BrowserSession {
     }
   }
 
-  async load(url: string): Promise<LoadResult> {
+  /**
+   * `opts.extraWaitMs` — дополнительное ожидание перед финальным чтением DOM,
+   * ПОСЛЕ того как антибот-челлендж (если был) уже отпустил страницу. Нужен
+   * для сайтов, которые дорисовывают подвал (и вместе с ним — навигацию)
+   * скриптом через несколько секунд после загрузки: без паузы `page.content()`
+   * возвращает разметку без единой внутренней ссылки. Обычные вызовы `load()`
+   * этот параметр не передают и, соответственно, не платят за него временем —
+   * см. `loadWithFooterRetry` в crawl.ts, которая включает его точечно.
+   */
+  async load(url: string, opts?: { extraWaitMs?: number }): Promise<LoadResult> {
     let page;
     try {
       page = await this.context.newPage();
@@ -59,6 +68,10 @@ export class BrowserSession {
           break;
         }
         await page.waitForTimeout(POLL_STEP_MS);
+      }
+
+      if (!blocked && opts?.extraWaitMs) {
+        await page.waitForTimeout(opts.extraWaitMs);
       }
 
       const html = await page.content().catch(() => '');

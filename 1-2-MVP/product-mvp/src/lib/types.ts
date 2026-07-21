@@ -139,7 +139,7 @@ export type CrawlCoverage = {
   /** Обход закончился сам, а не упёрся в бюджет */
   complete: boolean;
   /** Почему обход остановился */
-  stopReason: 'done' | 'pageLimit' | 'timeLimit';
+  stopReason: 'done' | 'pageLimit' | 'timeLimit' | 'sizeLimit';
 };
 
 export type SiteSnapshot = {

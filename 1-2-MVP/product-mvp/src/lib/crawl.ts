@@ -1,12 +1,20 @@
 import * as cheerio from 'cheerio';
 import type { CrawledPage, SiteSnapshot } from './types';
-import { BrowserSession } from './browser';
+import { BrowserSession, type LoadResult } from './browser';
 import { templateFingerprint } from './fingerprint';
 
 const MAX_PAGES = 300;
 const CRAWL_MS = 20 * 60 * 1000;
 const POLITE_DELAY_MS = 500;
 const PER_TEMPLATE = 5;
+/**
+ * Бюджет по суммарному объёму скачанного HTML. Сервер несёт 2 ГБ памяти на
+ * всё сразу: браузер (200-500 МБ), Next.js, PostgreSQL и кучу процесса самого
+ * обхода. 300 страниц по 200-500 КБ — это 205-405 МБ в куче, в худшем случае
+ * около 600 МБ (замерено `heapUsed`); без потолка по объёму большой сайт может
+ * уронить процесс посреди аудита. 150 МБ — с запасом ниже худшего случая.
+ */
+export const MAX_TOTAL_HTML = 150_000_000;
 // Слоты, зарезервированные под PROBE_PATHS. Без резерва основной обход на
 // крупном сайте (каталог сам по себе даёт 300 страниц) выедает MAX_PAGES
 // целиком, и подстраховка не срабатывает НИКОГДА — то есть отключается
@@ -298,17 +306,68 @@ function collectLinksScored(html: string, base: string): { url: string; score: n
   return scored.sort((a, b) => b.score - a.score);
 }
 
+/**
+ * Чистая логика остановки обхода — вынесена отдельно от `crawlSite`, чтобы её
+ * можно было проверить юнит-тестом без браузера. Порядок проверок совпадает
+ * с порядком, в котором они были записаны раньше внутри цикла: потолок
+ * страниц важнее лимита времени, лимит времени важнее бюджета по объёму —
+ * при одновременном срабатывании отчёт должен называть ОДНУ причину, и это
+ * всегда самая ранняя по этому списку.
+ */
+export function checkBudgets(
+  pagesCount: number,
+  totalHtmlBytes: number,
+  now: number,
+  deadline: number,
+  pageLimit: number,
+): 'pageLimit' | 'timeLimit' | 'sizeLimit' | null {
+  if (pagesCount >= pageLimit) return 'pageLimit';
+  if (now > deadline) return 'timeLimit';
+  if (totalHtmlBytes > MAX_TOTAL_HTML) return 'sizeLimit';
+  return null;
+}
+
+/** Функция загрузки страницы — сигнатура `BrowserSession.load`, но без привязки к классу (тестируется без браузера). */
+export type PageLoader = (url: string, opts?: { extraWaitMs?: number }) => Promise<LoadResult>;
+
+/** Сколько ждать дорисовки подвала при повторном чтении. Коротко — обычные сайты этой ветки не проходят вовсе. */
+const FOOTER_RETRY_WAIT_MS = 2500;
+
+/**
+ * Часть сайтов дорисовывает подвал (а вместе с ним — всю навигацию) скриптом
+ * через несколько секунд после загрузки. Живой Chromium это воспроизвёл:
+ * `BrowserSession.load()` в такой момент возвращает HTML с нулём внутренних
+ * ссылок — не потому что сайт пуст, а потому что мы прочитали DOM слишком
+ * рано. Ссылки на Политику, оферту и согласие живут именно в подвале, и на
+ * таких сайтах обход брал одну страницу и не находил ничего.
+ *
+ * Чиним точечно: если первое чтение дало ноль внутренних ссылок — повторяем
+ * чтение той же страницы РОВНО один раз с коротким ожиданием (не циклом).
+ * Обычные страницы (где ссылки нашлись сразу) второй вызов `load` не платят.
+ */
+export async function loadWithFooterRetry(load: PageLoader, url: string): Promise<LoadResult> {
+  const first = await load(url);
+  // Страница не загрузилась вовсе или осталась заглушкой антибота — повторное
+  // чтение той же страницы тут не поможет, это другая причина и другая логика.
+  if (!first || first.blocked) return first;
+  if (collectLinksScored(first.html, first.url).length > 0) return first;
+
+  const retried = await load(url, { extraWaitMs: FOOTER_RETRY_WAIT_MS });
+  return retried ?? first;
+}
+
 export async function crawlSite(
   inputUrl: string,
   onProgress?: (crawled: number, url: string) => void,
 ): Promise<SiteSnapshot> {
   const start = normalizeUrl(inputUrl);
   const session = await BrowserSession.open();
+  const load: PageLoader = (u, opts) => session.load(u, opts);
   try {
-    let home = await session.load(start);
+    let home = await loadWithFooterRetry(load, start);
     // https не ответил — пробуем http, но фиксируем это честно
     if (!home && start.startsWith('https://')) {
-      home = await session.load(start.replace(/^https:/, 'http:'));
+      home = await loadWithFooterRetry(load, start.replace(/^https:/, 'http:'));
     }
 
     if (!home) {
@@ -387,21 +446,23 @@ export async function crawlSite(
 
     const deadline = Date.now() + CRAWL_MS;
     let skippedByTemplate = 0;
-    let stopReason: 'done' | 'pageLimit' | 'timeLimit' = 'done';
+    let stopReason: 'done' | 'pageLimit' | 'timeLimit' | 'sizeLimit' = 'done';
+    // Суммарный объём скачанного HTML — бюджет по памяти (см. MAX_TOTAL_HTML).
+    let totalHtmlBytes = home.html.length;
 
     while (queue.length) {
       // Лимит основного обхода урезан на RESERVED_FOR_PROBES: иначе крупный
       // каталог выбирает весь MAX_PAGES ДО фазы проб, и подстраховка ниже
       // отключается целиком именно там, где она нужнее всего.
-      if (pages.length >= MAX_PAGES - RESERVED_FOR_PROBES) { stopReason = 'pageLimit'; break; }
-      if (Date.now() > deadline) { stopReason = 'timeLimit'; break; }
+      const budget = checkBudgets(pages.length, totalHtmlBytes, Date.now(), deadline, MAX_PAGES - RESERVED_FOR_PROBES);
+      if (budget) { stopReason = budget; break; }
 
       queue.sort((a, b) => b.score - a.score);
       const next = queue.shift()!;
       visited.add(next.url);
 
       await new Promise((r) => setTimeout(r, POLITE_DELAY_MS));
-      const page = await session.load(next.url);
+      const page = await loadWithFooterRetry(load, next.url);
       if (!page || page.blocked || page.status !== 200) continue;
 
       // Однотипных страниц (карточки товара) берём ограниченное число.
@@ -412,6 +473,7 @@ export async function crawlSite(
 
       const cp: CrawledPage = { url: page.url, status: page.status, html: page.html, text: page.text };
       pages.push(cp);
+      totalHtmlBytes += cp.html.length;
       onProgress?.(pages.length, cp.url);
       enqueue(cp.html, cp.url);
     }
@@ -427,8 +489,13 @@ export async function crawlSite(
     for (const path of PROBE_PATHS) {
       // Пробы ограничены полным MAX_PAGES (не урезанным), а не наоборот:
       // именно под них зарезервированы RESERVED_FOR_PROBES слотов выше.
+      // Потолок страниц здесь НЕ переписывает stopReason (как и раньше) —
+      // молчаливый break здесь не поведенческая правка задачи 3, оставляем
+      // как было. Объём и время — переписывают, это и есть новая честная
+      // остановка.
       if (pages.length >= MAX_PAGES) break;
       if (Date.now() > deadline) { stopReason = 'timeLimit'; break; }
+      if (totalHtmlBytes > MAX_TOTAL_HTML) { stopReason = 'sizeLimit'; break; }
       let probe: string;
       try { probe = new URL(path, home.url).toString(); } catch { continue; }
       if (visited.has(probe)) continue;
@@ -450,6 +517,7 @@ export async function crawlSite(
       templates.set(key, seenOfTemplate + 1);
 
       pages.push(cp);
+      totalHtmlBytes += cp.html.length;
       // Проба нашла страницу — значит страница обнаружена. discovered должен
       // отражать ВСЕ найденные адреса (обычным обходом и пробами), иначе в
       // отчёте «обойдено N из M найденных» получается N > M — числа, которые

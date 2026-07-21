@@ -101,7 +101,9 @@ function absenceUnknownReason(s: SiteSnapshot): string {
   const why =
     s.coverage.stopReason === 'timeLimit'
       ? 'исчерпан лимит времени на обход'
-      : 'достигнут потолок обхода';
+      : s.coverage.stopReason === 'sizeLimit'
+        ? 'сайт слишком тяжёлый, обход остановлен по объёму'
+        : 'достигнут потолок обхода';
   return (
     `Обойдено страниц: ${s.coverage.crawled} из ${s.coverage.discovered} найденных на сайте, ${why}. ` +
     'На осмотренных страницах не найдено, но заявлять отсутствие нельзя — часть сайта не просмотрена.'

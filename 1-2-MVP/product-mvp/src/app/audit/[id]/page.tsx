@@ -8,6 +8,18 @@ import { NORMS } from '@/lib/legal';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Почему обход не дошёл до конца. Причину называем ту, что была на самом деле:
+ * писать «достигнут потолок страниц», когда обход встал по объёму или времени,
+ * — то же враньё, от которого мы избавлялись в текстах проверок.
+ */
+const STOP_REASON_TEXT: Record<string, string> = {
+  pageLimit: 'достигнут потолок страниц',
+  timeLimit: 'исчерпан лимит времени',
+  sizeLimit: 'сайт слишком тяжёлый, остановились по объёму',
+  done: 'обход завершён',
+};
+
 export default async function AuditPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const auditId = parseId(id);
@@ -104,7 +116,7 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
             Осмотрено страниц: <b className="text-ink">{audit.coverage.crawled}</b> из{' '}
             {audit.coverage.discovered} найденных на сайте
             {!audit.coverage.complete && (
-              <> — обход остановлен: {audit.coverage.stopReason === 'timeLimit' ? 'исчерпан лимит времени' : 'достигнут потолок страниц'}</>
+              <> — обход остановлен: {STOP_REASON_TEXT[audit.coverage.stopReason]}</>
             )}
             {audit.coverage.skippedByTemplate > 0 && (
               <> · пропущено однотипных: {audit.coverage.skippedByTemplate}</>

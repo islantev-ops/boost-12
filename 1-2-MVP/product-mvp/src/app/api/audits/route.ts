@@ -7,7 +7,6 @@ export const runtime = 'nodejs';
 // внешний прокси платформы рвёт HTTP-запрос на 30-й секунде, а обход сайта
 // занимает минуты. Прогресс клиент забирает опросом /api/audits/[id]/status.
 export const dynamic = 'force-dynamic';
-export const maxDuration = 120;
 
 export async function GET() {
   try {

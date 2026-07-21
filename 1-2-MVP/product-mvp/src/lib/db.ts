@@ -56,7 +56,7 @@ export type AuditRow = {
   blocked_by_antibot: boolean;
   demo: boolean;
   created_at: string;
-  status: string;
+  status: AuditStatus;
   pages_crawled: number;
   current_url: string | null;
   coverage: CrawlCoverage | null;

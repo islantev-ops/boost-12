@@ -21,6 +21,17 @@ export async function GET(_req: Request, { params }: Ctx) {
       );
     }
 
+    // Кнопка скачивания скрыта интерфейсом, пока аудит идёт фоном, но прямой
+    // заход по адресу её не спрашивает. Без этой проверки такой запрос отдал
+    // бы пустой отчёт по недоделанному аудиту — то же самое ложное
+    // впечатление полноты, что и с блокировкой антиботом выше.
+    if (['queued', 'crawling', 'checking'].includes(data.audit.status)) {
+      return new Response(
+        'Проверка ещё не завершена: отчёт по недоделанному аудиту не формируется.',
+        { status: 409 },
+      );
+    }
+
     const buffer = await buildAuditDocx(data.audit, data.findings, data.anglicisms);
     const host = safeHost(data.audit.final_url);
 

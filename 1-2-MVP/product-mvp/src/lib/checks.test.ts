@@ -387,6 +387,7 @@ const check3of = (s: SiteSnapshot) => runChecks(s).find((f) => f.checkId === 3)!
 const check4of = (s: SiteSnapshot) => runChecks(s).find((f) => f.checkId === 4)!;
 const check5of = (s: SiteSnapshot) => runChecks(s).find((f) => f.checkId === 5)!;
 const check6of = (s: SiteSnapshot) => runChecks(s).find((f) => f.checkId === 6)!;
+const check7of = (s: SiteSnapshot) => runChecks(s).find((f) => f.checkId === 7)!;
 const check8of = (s: SiteSnapshot) => runChecks(s).find((f) => f.checkId === 8)!;
 
 /** Для check8 нужно несколько страниц с разным `text` — snapshot() даёт только одну (text всегда 'Магазин'). */
@@ -637,4 +638,30 @@ test('check6: summary при неполном обходе (без следов 
   assert.match(f.summary, /300/, 'сколько обошли — должно быть в summary');
   assert.match(f.summary, /1200/, 'сколько нашли — должно быть в summary');
   assert.doesNotMatch(f.summary, /скрипт/i, 'причина «скрипт» неверна — следов куки в скриптах нет');
+});
+
+/**
+ * Ревью задачи 2 (остаток): check7 при отсутствии форм вообще не различал
+ * «форм нет, обход полный» (вывод достоверен) и «форм нет, обход неполный»
+ * (форма могла быть на непросмотренной странице) — summary был зашит одной
+ * фразой на оба случая и никогда не называл охват. Это ровно инцидент
+ * gdpgroup.ru: «форм не найдено», хотя открыто 5 страниц из 15.
+ */
+test('check7: summary при неполном обходе без форм называет цифры охвата, а не «чекбоксов не найдено» (review)', () => {
+  const s = snapshot(RU); // CLEAN_HTML — без единой формы, подвал виден, не SPA
+  const partial: SiteSnapshot = { ...s, coverage: PARTIAL_COVERAGE };
+  const f = check7of(partial);
+  assert.match(f.summary, /300/, 'сколько обошли — должно быть в summary');
+  assert.match(f.summary, /1200/, 'сколько нашли — должно быть в summary');
+  assert.doesNotMatch(
+    f.summary,
+    /Заранее отмеченных чекбоксов не найдено/,
+    'старая недостоверная формулировка про весь сайт не должна выводиться',
+  );
+});
+
+test('check7: summary при полном обходе без форм называет обход достоверным, без цифр охвата (review, регресс)', () => {
+  const f = check7of(snapshot(RU)); // coverage.complete: true по умолчанию, форм нет
+  assert.match(f.summary, /обойдён полностью/, 'при полном обходе вывод должен называться достоверным');
+  assert.doesNotMatch(f.summary, /\d/, 'цифр охвата при полном обходе быть не должно');
 });

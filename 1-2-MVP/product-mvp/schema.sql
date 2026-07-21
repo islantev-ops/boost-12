@@ -1,6 +1,7 @@
 -- Схема базы аудитов. Накатывается на PostgreSQL, живущий на VPS.
 -- Запуск:  psql "$DATABASE_URL" -f schema.sql
 
+DROP TABLE IF EXISTS pages CASCADE;
 DROP TABLE IF EXISTS anglicisms CASCADE;
 DROP TABLE IF EXISTS letters CASCADE;
 DROP TABLE IF EXISTS findings CASCADE;
@@ -21,8 +22,31 @@ CREATE TABLE audits (
   -- Демо-запись: сайт вымышленный, пруфы придуманы. Без пометки такая строка
   -- выглядит как настоящий результат, и её идут перепроверять на живом сайте.
   demo            BOOLEAN     NOT NULL DEFAULT false,
+  -- Аудит идёт фоном: HTTP-запрос не ждёт результата (внешний прокси рвёт
+  -- соединение на 30-й секунде), клиент опрашивает статус.
+  status          TEXT        NOT NULL DEFAULT 'done'
+                  CHECK (status IN ('queued','crawling','checking','done','failed','blocked')),
+  pages_crawled   INTEGER     NOT NULL DEFAULT 0,
+  current_url     TEXT,
+  -- Факты охвата: сколько сайта посмотрели. Нужны отчёту, чтобы не заявлять
+  -- «документа нет» после неполного обхода.
+  coverage        JSONB,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Копии обойдённых страниц. Нужны, чтобы спорный вывод можно было поднять
+-- дословно: раньше аудит был невоспроизводим — HTML жил только в памяти.
+CREATE TABLE pages (
+  id            SERIAL PRIMARY KEY,
+  audit_id      INTEGER NOT NULL REFERENCES audits(id) ON DELETE CASCADE,
+  url           TEXT    NOT NULL,
+  status        INTEGER NOT NULL,
+  html          TEXT    NOT NULL,
+  text          TEXT    NOT NULL,
+  template_hash TEXT    NOT NULL
+);
+
+CREATE INDEX idx_pages_audit ON pages(audit_id);
 
 -- Ровно три исхода. Четвёртого — «пропало без следа» — быть не должно (PRD §8).
 CREATE TABLE findings (

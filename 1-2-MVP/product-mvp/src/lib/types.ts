@@ -122,6 +122,26 @@ export type HostingFact = {
   error?: string;
 };
 
+/**
+ * Сколько сайта мы реально посмотрели. Нужен, чтобы отчёт не выдавал
+ * «документа нет» после обхода трети сайта: вывод об отсутствии допустим
+ * только при полном обходе.
+ */
+export type CrawlCoverage = {
+  /** Сколько страниц скачали */
+  crawled: number;
+  /** Сколько внутренних адресов вообще нашли на сайте */
+  discovered: number;
+  /** Пропущено как однотипные (лимит на один отпечаток шаблона) */
+  skippedByTemplate: number;
+  /** Пропущено из-за потолка страниц или лимита времени */
+  skippedByLimit: number;
+  /** Обход закончился сам, а не упёрся в бюджет */
+  complete: boolean;
+  /** Почему обход остановился */
+  stopReason: 'done' | 'pageLimit' | 'timeLimit';
+};
+
 export type SiteSnapshot = {
   inputUrl: string;
   finalUrl: string;
@@ -147,6 +167,8 @@ export type SiteSnapshot = {
    * счётчики и ушли бы клиенту как его нарушение.
    */
   blockedByAntibot: boolean;
+  /** Факты охвата: сколько сайта мы посмотрели. См. canProveAbsence в checks.ts */
+  coverage: CrawlCoverage;
   /**
    * Где стоит сайт. Заполняется в `auditSite`, не в `crawlSite`: краул знает
    * про страницы, гео — про сеть, и мешать их не нужно. `null` — не смотрели.

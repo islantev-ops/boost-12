@@ -241,6 +241,7 @@ export async function crawlSite(inputUrl: string): Promise<SiteSnapshot> {
         clientRendered: false,
         footerVisible: false,
         blockedByAntibot: false,
+        coverage: { crawled: 0, discovered: 0, skippedByTemplate: 0, skippedByLimit: 0, complete: false, stopReason: 'done' },
         hosting: null,
         pages: [],
       };
@@ -258,6 +259,7 @@ export async function crawlSite(inputUrl: string): Promise<SiteSnapshot> {
         clientRendered: false,
         footerVisible: false,
         blockedByAntibot: true,
+        coverage: { crawled: 0, discovered: 0, skippedByTemplate: 0, skippedByLimit: 0, complete: false, stopReason: 'done' },
         hosting: null,
         pages: [],
       };
@@ -312,6 +314,7 @@ export async function crawlSite(inputUrl: string): Promise<SiteSnapshot> {
       clientRendered: detectClientRendered(home.html),
       footerVisible: detectFooter(home.html, home.url),
       blockedByAntibot: false,
+      coverage: { crawled: pages.length, discovered: pages.length, skippedByTemplate: 0, skippedByLimit: 0, complete: true, stopReason: 'done' },
       hosting: null,
       pages,
     };

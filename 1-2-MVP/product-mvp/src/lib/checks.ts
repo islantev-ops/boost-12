@@ -87,18 +87,34 @@ const NO_FOOTER_REASON =
  * видели того места, где ссылка обязана быть, и обвинение будет ложным.
  */
 function canProveAbsence(s: SiteSnapshot): boolean {
-  return !s.clientRendered && s.footerVisible;
+  return !s.clientRendered && s.footerVisible && s.coverage.complete;
+}
+
+/**
+ * Почему нельзя заявить «этого на сайте нет». Возвращает готовую фразу для
+ * отчёта: причину и цифры охвата. Требование владельца — вердикт «требует
+ * ручной проверки» обязан объяснять себя, а не отписываться.
+ */
+function absenceUnknownReason(s: SiteSnapshot): string {
+  if (s.clientRendered) return SPA_REASON;
+  if (!s.footerVisible) return NO_FOOTER_REASON;
+  const why =
+    s.coverage.stopReason === 'timeLimit'
+      ? 'исчерпан лимит времени на обход'
+      : 'достигнут потолок обхода';
+  return (
+    `Обойдено страниц: ${s.coverage.crawled} из ${s.coverage.discovered} найденных на сайте, ${why}. ` +
+    'На осмотренных страницах не найдено, но заявлять отсутствие нельзя — часть сайта не просмотрена.'
+  );
 }
 
 function absenceGateFactor(s: SiteSnapshot, found: boolean): Factor {
   return {
     name: 'Место, где ссылка обязана быть, видно в коде',
     vote: found ? 'ok' : canProveAbsence(s) ? 'violation' : 'unknown',
-    detail: s.clientRendered
-      ? SPA_REASON
-      : !s.footerVisible
-        ? NO_FOOTER_REASON
-        : 'HTML и подвал отдаются сервером — отсутствие ссылки в коде показательно.',
+    detail: canProveAbsence(s)
+      ? 'HTML и подвал отдаются сервером, сайт обойдён полностью — отсутствие ссылки показательно.'
+      : absenceUnknownReason(s),
   };
 }
 
@@ -496,9 +512,7 @@ function check2(s: SiteSnapshot): CheckResult {
         ? `Найдено упоминаний в коде: ${hits.length}. Мета признана экстремистской организацией, её символика на сайте недопустима.`
         : canProveAbsence(s)
           ? 'Ссылок и логотипов Инстаграма и Фейсбука в коде страниц не найдено.'
-          : s.clientRendered
-            ? SPA_REASON
-            : NO_FOOTER_REASON,
+          : absenceUnknownReason(s),
       evidence: hits[0],
     },
   ];
@@ -510,7 +524,7 @@ function check2(s: SiteSnapshot): CheckResult {
       ? `На сайте есть ссылки или логотипы Инстаграма/Фейсбука (найдено мест: ${hits.length}). Мета признана экстремистской организацией — её символика на сайте недопустима.`
       : canProveAbsence(s)
         ? 'Ссылок и логотипов запрещённых соцсетей не обнаружено.'
-        : 'Иконки соцсетей обычно стоят в подвале, а подвал в исходном коде не виден. Утверждать, что логотипов нет, нельзя — нужно посмотреть страницу в браузере.',
+        : absenceUnknownReason(s),
   };
 }
 
@@ -930,8 +944,8 @@ function check7(s: SiteSnapshot): CheckResult {
       name: 'Формы сбора персональных данных',
       vote: nothingFound(s),
       detail: canProveAbsence(s)
-        ? 'Форм сбора персональных данных на скачанных страницах не найдено.'
-        : 'Форм в исходном коде не найдено, но часть страницы дорисовывается скриптами — форма может появляться в браузере.',
+        ? 'Форм сбора персональных данных на осмотренных страницах не найдено, сайт обойдён полностью.'
+        : absenceUnknownReason(s),
     });
   }
 
@@ -972,16 +986,14 @@ function check8(s: SiteSnapshot): CheckResult {
       vote: nothingFound(s),
       detail: canProveAbsence(s)
         ? 'Форм подписки и упоминаний рассылки на сайте не найдено — требование к целям рассылки неприменимо.'
-        : s.clientRendered
-          ? SPA_REASON
-          : NO_FOOTER_REASON,
+        : absenceUnknownReason(s),
     });
     return {
       factors,
       verdict: canProveAbsence(s) ? 'ok' : 'manual',
       summary: canProveAbsence(s)
         ? 'Подписки и рассылки на сайте не обнаружено — требование неприменимо.'
-        : 'Форма подписки обычно стоит в подвале, а подвал в исходном коде не виден. Есть ли на сайте рассылка — нужно проверить в браузере.',
+        : absenceUnknownReason(s),
     };
   }
 

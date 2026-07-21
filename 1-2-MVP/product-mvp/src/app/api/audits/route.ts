@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
-import { auditSite } from '@/lib/audit';
-import { listAudits, saveAudit } from '@/lib/db';
+import { createQueuedAudit, listAudits } from '@/lib/db';
+import { enqueueAudit, recoverOnce } from '@/lib/queue';
 
 export const runtime = 'nodejs';
-// Аудит открывает до 18 страниц чужого сайта настоящим браузером (Playwright):
-// это долго и всегда «живое». Часть сайтов под защитой — тогда снапшот
-// помечается blockedByAntibot и проверки не запускаются.
+// Аудит идёт фоном: POST ставит задачу в очередь и сразу отдаёт id, потому что
+// внешний прокси платформы рвёт HTTP-запрос на 30-й секунде, а обход сайта
+// занимает минуты. Прогресс клиент забирает опросом /api/audits/[id]/status.
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
@@ -29,21 +29,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Вставьте ссылку на сайт.' }, { status: 400 });
   }
 
-  const result = await auditSite(url.trim());
-
-  // Сайт не открылся — письмо не генерируем (PRD §7), но запись сохраняем.
   try {
-    const id = await saveAudit(result);
-    return NextResponse.json({
-      id,
-      reachable: result.snapshot.reachable,
-      blockedByAntibot: result.snapshot.blockedByAntibot,
-      error: result.snapshot.error ?? null,
-    });
+    await recoverOnce();
+    const id = await createQueuedAudit(url.trim());
+    enqueueAudit(id, url.trim());
+    // Отвечаем сразу: внешний прокси рвёт соединение на 30-й секунде, а обход
+    // сайта идёт минуты. Клиент следит за прогрессом опросом статуса.
+    return NextResponse.json({ id, status: 'queued' });
   } catch (e) {
     return NextResponse.json(
       {
-        error: 'Аудит выполнен, но сохранить в базу не удалось.',
+        error: 'Не удалось поставить проверку в очередь.',
         detail: e instanceof Error ? e.message : String(e),
         dbOffline: true,
       },

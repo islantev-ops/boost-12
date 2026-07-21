@@ -7,6 +7,12 @@ const MAX_PAGES = 300;
 const CRAWL_MS = 20 * 60 * 1000;
 const POLITE_DELAY_MS = 500;
 const PER_TEMPLATE = 5;
+// Слоты, зарезервированные под PROBE_PATHS. Без резерва основной обход на
+// крупном сайте (каталог сам по себе даёт 300 страниц) выедает MAX_PAGES
+// целиком, и подстраховка не срабатывает НИКОГДА — то есть отключается
+// именно там, где нужнее всего: на сайтах, где документ не прилинкован, а
+// каталог большой. Резерв меньше основного бюджета, но гарантирован всегда.
+const RESERVED_FOR_PROBES = 20;
 
 /**
  * Форма адреса страницы: последний сегмент пути заменяется звёздочкой.
@@ -109,6 +115,42 @@ function normalizeUrl(raw: string): string {
   const trimmed = raw.trim();
   if (!/^https?:\/\//i.test(trimmed)) return `https://${trimmed}`;
   return trimmed;
+}
+
+/** Параметры отслеживания: не меняют содержимое страницы, только дублируют её в очереди. */
+const TRACKING_PARAMS = new Set(['yclid', 'gclid', 'from', 'ref']);
+
+/**
+ * Приводит адрес к каноническому виду перед постановкой в очередь и перед
+ * проверкой `discovered`. Без этого один и тот же документ ставится в очередь
+ * снова и снова под разными масками (якорь, utm-метка, слеш на конце) — и
+ * бюджет обхода уходит на копии одной страницы вместо новых.
+ *
+ * Путь НЕ приводим к нижнему регистру: часть серверов (в первую очередь на
+ * Linux-хостинге) различает `/Page` и `/page` как разные ресурсы, и склейка
+ * дала бы 404 там, где сейчас всё работает.
+ */
+export function normalizeForQueue(rawUrl: string): string {
+  let u: URL;
+  try {
+    u = new URL(rawUrl);
+  } catch {
+    return rawUrl;
+  }
+  u.hash = '';
+  u.host = u.host.toLowerCase();
+
+  const params = new URLSearchParams(u.search);
+  for (const key of [...params.keys()]) {
+    if (/^utm_/i.test(key) || TRACKING_PARAMS.has(key.toLowerCase())) params.delete(key);
+  }
+  const qs = params.toString();
+  u.search = qs ? `?${qs}` : '';
+
+  if (u.pathname.length > 1 && u.pathname.endsWith('/')) {
+    u.pathname = u.pathname.replace(/\/+$/, '');
+  }
+  return u.toString();
 }
 
 export function htmlToText(html: string): string {
@@ -305,6 +347,14 @@ export async function crawlSite(
 
     const homePage: CrawledPage = { url: home.url, status: home.status, html: home.html, text: home.text };
     const pages: CrawledPage[] = [homePage];
+    onProgress?.(pages.length, homePage.url);
+    // `visited` НЕ дублирует дедупликацию очереди: URL попадает в `queue`
+    // ровно один раз (это гарантирует проверка `discovered.has` внутри
+    // enqueue — до того, как элемент попадёт в очередь), поэтому проверка
+    // «уже видели» в основном цикле была бы недостижима. `visited` нужен
+    // отдельно — чтобы фаза проб (PROBE_PATHS) не запрашивала повторно адрес,
+    // который уже пришёл через обычные ссылки и обход, и чтобы не бить по
+    // одному адресу дважды между пробами.
     const visited = new Set([home.url]);
     // Ключ группы — форма адреса ВМЕСТЕ с отпечатком разметки. Одного
     // отпечатка мало: структурно одинаковые, но разные по смыслу страницы
@@ -318,9 +368,19 @@ export async function crawlSite(
     const discovered = new Set<string>([home.url]);
     const enqueue = (html: string, base: string) => {
       for (const { url, score } of collectLinksScored(html, base)) {
-        if (discovered.has(url)) continue;
-        discovered.add(url);
-        queue.push({ url, score });
+        // Нормализация ДО проверки discovered: без неё один и тот же документ
+        // с разным регистром хоста, якорем, utm-меткой или слешем на конце
+        // считается новым адресом каждый раз и съедает бюджет обхода копиями
+        // одной страницы вместо новых.
+        const normalized = normalizeForQueue(url);
+        if (discovered.has(normalized)) continue;
+        discovered.add(normalized);
+        // Если после очистки трекинга в адресе остались query-параметры — это
+        // почти всегда фильтр каталога или пагинация. Не выбрасываем совсем
+        // (`?page=2` может вести на страницы, которых больше нигде нет), но
+        // обходим их последними: скор на 1 меньше.
+        const hasQuery = normalized.includes('?');
+        queue.push({ url: normalized, score: hasQuery ? score - 1 : score });
       }
     };
     enqueue(home.html, home.url);
@@ -330,12 +390,14 @@ export async function crawlSite(
     let stopReason: 'done' | 'pageLimit' | 'timeLimit' = 'done';
 
     while (queue.length) {
-      if (pages.length >= MAX_PAGES) { stopReason = 'pageLimit'; break; }
+      // Лимит основного обхода урезан на RESERVED_FOR_PROBES: иначе крупный
+      // каталог выбирает весь MAX_PAGES ДО фазы проб, и подстраховка ниже
+      // отключается целиком именно там, где она нужнее всего.
+      if (pages.length >= MAX_PAGES - RESERVED_FOR_PROBES) { stopReason = 'pageLimit'; break; }
       if (Date.now() > deadline) { stopReason = 'timeLimit'; break; }
 
       queue.sort((a, b) => b.score - a.score);
       const next = queue.shift()!;
-      if (visited.has(next.url)) continue;
       visited.add(next.url);
 
       await new Promise((r) => setTimeout(r, POLITE_DELAY_MS));
@@ -355,6 +417,7 @@ export async function crawlSite(
     }
 
     // Документы, опубликованные, но не прилинкованные ниоткуда.
+    await new Promise((r) => setTimeout(r, POLITE_DELAY_MS));
     const canary = await session.load(new URL(`/nnq-${'probe'}-404-check/`, home.url).toString());
     const canarySignature =
       canary && !canary.blocked && canary.status === 200
@@ -362,18 +425,37 @@ export async function crawlSite(
         : null;
 
     for (const path of PROBE_PATHS) {
+      // Пробы ограничены полным MAX_PAGES (не урезанным), а не наоборот:
+      // именно под них зарезервированы RESERVED_FOR_PROBES слотов выше.
       if (pages.length >= MAX_PAGES) break;
+      if (Date.now() > deadline) { stopReason = 'timeLimit'; break; }
       let probe: string;
       try { probe = new URL(path, home.url).toString(); } catch { continue; }
       if (visited.has(probe)) continue;
       visited.add(probe);
+      await new Promise((r) => setTimeout(r, POLITE_DELAY_MS));
       const page = await session.load(probe);
       if (!page || page.blocked || page.status !== 200) continue;
       const cp: CrawledPage = { url: page.url, status: page.status, html: page.html, text: page.text };
       if (looksLikeNotFound(cp)) continue;
       if (canarySignature && signature(cp) === canarySignature) continue;
       if (cp.text.length < 200) continue;
+
+      // Тот же лимит «не больше PER_TEMPLATE на группу», что и в основном
+      // обходе: без него проба могла бы протащить в pages шестую и седьмую
+      // копию одного шаблона в обход общего правила.
+      const key = groupKey(cp.url, cp.html);
+      const seenOfTemplate = templates.get(key) ?? 0;
+      if (seenOfTemplate >= PER_TEMPLATE) { skippedByTemplate++; continue; }
+      templates.set(key, seenOfTemplate + 1);
+
       pages.push(cp);
+      // Проба нашла страницу — значит страница обнаружена. discovered должен
+      // отражать ВСЕ найденные адреса (обычным обходом и пробами), иначе в
+      // отчёте «обойдено N из M найденных» получается N > M — числа, которые
+      // противоречат сами себе на первый взгляд читателя.
+      discovered.add(probe);
+      onProgress?.(pages.length, cp.url);
     }
 
     return {

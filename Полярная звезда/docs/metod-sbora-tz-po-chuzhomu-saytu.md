@@ -102,5 +102,5 @@
   ответ API — `The user's Drive storage quota has been exceeded`. Общих дисков нет.
   Обходной путь: собрать HTML и импортировать в Google Docs перетаскиванием.
   Постоянное решение — OAuth от имени пользователя, но он от настройки OAuth отказывался.
-- **`node_modules` лежит в `claude-config/boost-tools/lib`**, а не в `boost-tools`.
+- **`node_modules` лежит в `claude-config/redstar/lib`**, а не в `redstar`.
   Скрипт запускать оттуда, иначе `Cannot find module 'googleapis'`.

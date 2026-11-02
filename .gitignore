@@ -28,3 +28,10 @@ claude-config/
 .vercel
 *.tsbuildinfo
 next-env.d.ts
+
+# Codex: отдельный репозиторий и локальные настройки
+Codex-config/
+.claude/
+outputs/
+# Домашняя инструкция подготовлена локально; синхронизация отложена пользователем.
+ДОМА — быстрый запуск Codex.md

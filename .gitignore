@@ -33,3 +33,7 @@ next-env.d.ts
 Codex-config/
 .claude/
 outputs/
+
+# Локальные снимки Google Sheets (включая снимки вне рабочее/).
+**/.redstar-snapshots/
+*.snapshot.json

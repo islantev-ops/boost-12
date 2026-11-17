@@ -1,0 +1,113 @@
+[
+  {
+    "name": "Продукт и состав работ",
+    "cards": {
+      "header": {
+        "html": "<div style=\"font-size:32px;font-weight:bold;color:#FFFFFF\">GEO Redstar · что входит в услугу</div><div style=\"font-size:18px;line-height:1.29;margin-top:7px\">Что делаем для клиента и что показываем по итогам работ.</div>",
+        "fill": "29263B"
+      },
+      "value": {
+        "html": "<div style=\"font-size:24px;font-weight:bold;color:#26573B\">Что продаём</div><ul style=\"margin:7px 0 0;padding-left:20px;font-size:19px;line-height:1.3\"><li style=\"margin:0 0 6px\">Проверяем, как ИИ отвечает на вопросы покупателей и что пишет о компании.</li><li style=\"margin:0 0 6px\">Дорабатываем сайт и сведения на других площадках.</li><li style=\"margin:0 0 6px\">Повторяем проверку, чтобы показать, что изменилось.</li></ul>",
+        "fill": "E7F1E8"
+      },
+      "audience": {
+        "html": "<div style=\"font-size:24px;font-weight:bold;color:#1B4976\">Кому подходит GEO</div><ul style=\"margin:7px 0 0;padding-left:20px;font-size:19px;line-height:1.3\"><li style=\"margin:0 0 6px\">Местным компаниям, которых ищут по услуге и городу.</li><li style=\"margin:0 0 6px\">Магазинам, чьи покупатели сравнивают товары перед заказом.</li><li style=\"margin:0 0 6px\">Производителям и поставщикам, которых ищут по требованиям к товару.</li><li style=\"margin:0 0 6px\">Компаниям со сложной услугой, о которой покупатели сначала спрашивают ИИ.</li></ul>",
+        "fill": "E7EFFA"
+      },
+      "requests": {
+        "html": "<div style=\"font-size:24px;font-weight:bold;color:#1B4976\">С какими задачами приходят</div><ul style=\"margin:7px 0 0;padding-left:20px;font-size:19px;line-height:1.3\"><li style=\"margin:0 0 6px\">Попасть в рекомендации ИИ по своим товарам или услугам.</li><li style=\"margin:0 0 6px\">Появляться в ответах, где ИИ рекомендует конкурентов.</li><li style=\"margin:0 0 6px\">Исправить ошибки и устаревшие сведения о компании.</li><li style=\"margin:0 0 6px\">Добиться, чтобы ИИ ссылался на сайт компании.</li><li style=\"margin:0 0 6px\">Понять, что ИИ отвечает о компании и какие страницы стоит доработать.</li></ul>",
+        "fill": "E7EFFA"
+      },
+      "outcome": {
+        "html": "<div style=\"font-size:24px;font-weight:bold;color:#563B78\">Что получает клиент</div><ul style=\"margin:7px 0 0;padding-left:20px;font-size:19px;line-height:1.3\"><li style=\"margin:0 0 6px\">Цель — больше переходов из ответов ИИ и заявок с сайта.</li><li style=\"margin:0 0 6px\">На старте — что ИИ отвечает о компании и что будем дорабатывать.</li><li style=\"margin:0 0 6px\">Каждый месяц — что сделали и как изменились упоминания и ссылки.</li><li style=\"margin:0 0 6px\">В Метрике — сколько визитов пришло из распознанных ИИ-источников и в скольких отправили форму.</li><li style=\"margin:0 0 6px\">На следующий месяц — список задач.</li></ul>",
+        "fill": "F0E9F8"
+      },
+      "diagnosis": {
+        "html": "<div style=\"font-size:24px;font-weight:bold;color:#563B78\">Как проверяем ответы ИИ</div><ul style=\"margin:7px 0 0;padding-left:20px;font-size:19px;line-height:1.3\"><li style=\"margin:0 0 6px\">Подбираем вопросы перед покупкой, например «Как выбрать утеплитель?».</li><li style=\"margin:0 0 6px\">При необходимости задаём вопросы с названием компании.</li><li style=\"margin:0 0 6px\">Сохраняем ответы и ссылки, отмечаем конкурентов, ошибки и пробелы.</li></ul>",
+        "fill": "F0E9F8"
+      },
+      "site": {
+        "html": "<div style=\"font-size:24px;font-weight:bold;color:#26573B\">Что меняем на сайте</div><ul style=\"margin:7px 0 0;padding-left:20px;font-size:19px;line-height:1.3\"><li style=\"margin:0 0 6px\">Проверяем, открываются ли важные страницы и видны ли они в поиске.</li><li style=\"margin:0 0 6px\">Готовим задания на исправление технических ошибок.</li><li style=\"margin:0 0 6px\">Дорабатываем структуру страниц товаров и услуг.</li><li style=\"margin:0 0 6px\">Добавляем прямые ответы на вопросы покупателей.</li><li style=\"margin:0 0 6px\">Готовим статьи, обзоры и сравнения.</li><li style=\"margin:0 0 6px\">Оформляем кейсы с проверяемыми результатами.</li><li style=\"margin:0 0 6px\">Уточняем сведения о компании и авторах материалов.</li><li style=\"margin:0 0 6px\">Готовим задания на добавление и исправление разметки.</li></ul><div style=\"margin-top:8px;font-size:19px\">Эксперт клиента проверяет факты.</div>",
+        "fill": "E7F1E8"
+      },
+      "external": {
+        "html": "<div style=\"font-size:24px;font-weight:bold;color:#26573B\">Что делаем за пределами сайта</div><ul style=\"margin:7px 0 0;padding-left:20px;font-size:19px;line-height:1.3\"><li style=\"margin:0 0 6px\">Собираем внешние источники, на которые ссылается ИИ.</li><li style=\"margin:0 0 6px\">Ищем отраслевые площадки, где уже представлены конкуренты.</li><li style=\"margin:0 0 6px\">Уточняем контакты, услуги и часы работы в карточках на картах.</li><li style=\"margin:0 0 6px\">Обновляем профили компании в справочниках и отраслевых каталогах.</li><li style=\"margin:0 0 6px\">Готовим данные о товарах и услугах для профильных площадок.</li><li style=\"margin:0 0 6px\">Готовим экспертные комментарии и материалы для отраслевых медиа.</li><li style=\"margin:0 0 6px\">Запрашиваем исправления в чужих публикациях с ошибками о компании.</li><li style=\"margin:0 0 6px\">Проверяем публикации и смотрим, появились ли они среди источников ИИ.</li></ul><div style=\"margin-top:8px;font-size:19px\">Согласуем площадки и работы. Правки на чужих сайтах зависят от их владельцев.</div>",
+        "fill": "E7F1E8"
+      },
+      "promise": {
+        "html": "<div style=\"font-size:24px;font-weight:bold;color:#563B78\">Что обещаем клиенту</div><ul style=\"margin:7px 0 0;padding-left:20px;font-size:19px;line-height:1.3\"><li style=\"margin:0 0 6px\">Согласуем, какие работы выполняем и какие сервисы и вопросы проверяем.</li><li style=\"margin:0 0 6px\">Выполняем работы и показываем, как изменились ответы ИИ.</li></ul>",
+        "fill": "F0E9F8"
+      }
+    }
+  },
+  {
+    "name": "Процесс команды",
+    "cards": {
+      "header": {
+        "html": "<div style=\"font-size:32px;font-weight:bold;color:#FFFFFF\">GEO Redstar · как работаем</div><div style=\"font-size:18px;line-height:1.29;margin-top:7px\">Кто ведёт каждый этап и какой результат передаёт дальше.</div>",
+        "fill": "29263B"
+      },
+      "brief": {
+        "html": "<div style=\"font-size:24px;font-weight:bold;color:#1B4976\">Что уточняет продажник</div><ul style=\"margin:7px 0 0;padding-left:20px;font-size:19px;line-height:1.3\"><li style=\"margin:0 0 6px\">Какие товары или услуги продвигаем и кто их покупает.</li><li style=\"margin:0 0 6px\">В каких городах работаем, с кем конкурируем и какого результата ждёт клиент.</li><li style=\"margin:0 0 6px\">Какой сайт берём, кто проверяет факты, кто вносит правки и что проверяем на старте.</li></ul>",
+        "fill": "E7EFFA"
+      },
+      "baseline": {
+        "html": "<div style=\"font-size:24px;font-weight:bold;color:#563B78\">Стартовая проверка</div><ul style=\"margin:7px 0 0;padding-left:20px;font-size:19px;line-height:1.3\"><li style=\"margin:0 0 6px\">SEO-специалист подбирает вопросы, сервисы ИИ и условия проверки.</li><li style=\"margin:0 0 6px\">Записывает вопрос, сервис, дату, ответ и ссылки.</li><li style=\"margin:0 0 6px\">Отмечает, где компания отсутствует и какие сведения надо исправить.</li></ul>",
+        "fill": "F0E9F8"
+      },
+      "plan": {
+        "html": "<div style=\"font-size:24px;font-weight:bold;color:#1B4976\">План и оценка работ</div><ul style=\"margin:7px 0 0;padding-left:20px;font-size:19px;line-height:1.3\"><li style=\"margin:0 0 6px\">SEO-специалист предлагает правки страниц, новые материалы и обновления на внешних площадках.</li><li style=\"margin:0 0 6px\">Менеджер согласует с клиентом работы, цену, сроки и ответственных.</li></ul>",
+        "fill": "E7EFFA"
+      },
+      "report": {
+        "html": "<div style=\"font-size:24px;font-weight:bold;color:#563B78\">Что показываем в отчёте</div><ul style=\"margin:7px 0 0;padding-left:20px;font-size:19px;line-height:1.3\"><li style=\"margin:0 0 6px\">Менеджер показывает, что сделано и как изменились ответы ИИ.</li><li style=\"margin:0 0 6px\">По Метрике показывает визиты из распознаваемых ИИ-источников и отправки форм, если они отслеживаются.</li><li style=\"margin:0 0 6px\">Согласует с клиентом задачи на следующий месяц.</li></ul>",
+        "fill": "F0E9F8"
+      },
+      "measure": {
+        "html": "<div style=\"font-size:24px;font-weight:bold;color:#563B78\">Повторная проверка</div><ul style=\"margin:7px 0 0;padding-left:20px;font-size:19px;line-height:1.3\"><li style=\"margin:0 0 6px\">Задаём те же вопросы в тех же сервисах и сравниваем ответы со стартом.</li><li style=\"margin:0 0 6px\">Считаем упоминания, ссылки на сайт и цитаты.</li><li style=\"margin:0 0 6px\">Если ответы сильно различаются, повторяем запрос и сохраняем примеры.</li></ul>",
+        "fill": "F0E9F8"
+      },
+      "delivery": {
+        "html": "<div style=\"font-size:24px;font-weight:bold;color:#26573B\">Кто готовит и вносит правки</div><ul style=\"margin:7px 0 0;padding-left:20px;font-size:19px;line-height:1.3\"><li style=\"margin:0 0 6px\">SEO-специалист готовит материалы и задания.</li><li style=\"margin:0 0 6px\">Менеджер клиента проверяет факты.</li><li style=\"margin:0 0 6px\">Разработчик вносит правки.</li><li style=\"margin:0 0 6px\">Менеджер проверяет публикацию, сохраняет ссылки и отмечает открытые задачи.</li></ul>",
+        "fill": "E7F1E8"
+      },
+      "record": {
+        "html": "<div style=\"font-size:24px;font-weight:bold;color:#563B78\">Что храним по проекту</div><ul style=\"margin:7px 0 0;padding-left:20px;font-size:19px;line-height:1.3\"><li style=\"margin:0 0 6px\">Вводные, вопросы для ИИ, ответы и ссылки на источники.</li><li style=\"margin:0 0 6px\">План с оценкой и ссылки на выполненные правки.</li><li style=\"margin:0 0 6px\">Сравнение замеров и задачи на следующий месяц.</li></ul>",
+        "fill": "F0E9F8"
+      }
+    }
+  },
+  {
+    "name": "Тарифы и условия",
+    "cards": {
+      "header": {
+        "html": "<div style=\"font-size:32px;font-weight:bold;color:#FFFFFF\">GEO Redstar · тарифы и условия</div><div style=\"font-size:18px;line-height:1.29;margin-top:7px\">Что входит в тарифы и о чём договариваемся перед стартом.</div>",
+        "fill": "29263B"
+      },
+      "geo": {
+        "html": "<div style=\"font-size:24px;font-weight:bold;color:#1B4976\">GEO · 40 000 ₽ / месяц</div><ul style=\"margin:7px 0 0;padding-left:20px;font-size:19px;line-height:1.3\"><li style=\"margin:0 0 6px\">Проверяем ответы ИИ на вопросы покупателей.</li><li style=\"margin:0 0 6px\">Готовим материалы и задания на правки сайта. Согласуем работы на внешних площадках.</li><li style=\"margin:0 0 6px\">Повторяем проверки и показываем результат в отчёте.</li></ul>",
+        "fill": "E7EFFA"
+      },
+      "combo": {
+        "html": "<div style=\"font-size:24px;font-weight:bold;color:#1B4976\">SEO + GEO · 70 000 ₽ / месяц</div><ul style=\"margin:7px 0 0;padding-left:20px;font-size:19px;line-height:1.3\"><li style=\"margin:0 0 6px\">Делаем всё из GEO, изучаем поисковые запросы и сайты конкурентов.</li><li style=\"margin:0 0 6px\">Подбираем запросы для продвижения, предлагаем правки страниц и готовим задания.</li><li style=\"margin:0 0 6px\">Работы программистов по обоим тарифам оцениваем отдельно.</li></ul>",
+        "fill": "E7EFFA"
+      },
+      "scope": {
+        "html": "<div style=\"font-size:24px;font-weight:bold;color:#1B4976\">Что согласуем в коммерческом предложении</div><ul style=\"margin:7px 0 0;padding-left:20px;font-size:19px;line-height:1.3\"><li style=\"margin:0 0 6px\">Какие товары, услуги, города и страницы берём в работу.</li><li style=\"margin:0 0 6px\">В каких сервисах ИИ и по каким вопросам проверяем ответы.</li><li style=\"margin:0 0 6px\">Какие материалы, правки и внешние площадки включаем в план.</li><li style=\"margin:0 0 6px\">Кто согласует факты и вносит правки. Какие расходы оцениваем отдельно.</li><li style=\"margin:0 0 6px\">Когда делаем замеры и отчёт. Какие визиты и цели видны в Метрике.</li></ul>",
+        "fill": "E7EFFA"
+      },
+      "limits": {
+        "html": "<div style=\"font-size:24px;font-weight:bold;color:#1B4976\">Сколько работ берём на месяц</div><ul style=\"margin:7px 0 0;padding-left:20px;font-size:19px;line-height:1.3\"><li style=\"margin:0 0 6px\">Сколько вопросов проверяем, в каких сервисах и как часто.</li><li style=\"margin:0 0 6px\">Сколько статей, ответов на частые вопросы и правок готовим.</li><li style=\"margin:0 0 6px\">Укладываются ли часы команды в цену тарифа.</li></ul>",
+        "fill": "E7EFFA"
+      },
+      "entry": {
+        "html": "<div style=\"font-size:24px;font-weight:bold;color:#563B78\">Стартовый замер и регулярные проверки</div><ul style=\"margin:7px 0 0;padding-left:20px;font-size:19px;line-height:1.3\"><li style=\"margin:0 0 6px\">На старте смотрим, по каким вопросам ИИ упоминает компанию и куда ведут ссылки.</li><li style=\"margin:0 0 6px\">Во время сопровождения задаём те же вопросы и сравниваем ответы со стартом.</li></ul>",
+        "fill": "F0E9F8"
+      },
+      "proof": {
+        "html": "<div style=\"font-size:24px;font-weight:bold;color:#563B78\">Что подготовить для продаж</div><ul style=\"margin:7px 0 0;padding-left:20px;font-size:19px;line-height:1.3\"><li style=\"margin:0 0 6px\">Подготовить пример отчёта без названия клиента.</li><li style=\"margin:0 0 6px\">Собрать пример проекта GEO с выполненными работами и замерами до и после.</li></ul>",
+        "fill": "F0E9F8"
+      }
+    }
+  }
+]
